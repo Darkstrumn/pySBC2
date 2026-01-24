@@ -219,12 +219,13 @@ class ConsoleMFD:
             ("ToggleBufferMaterial", "Buffer Material"),
             ("ToggleVTLocation", "VT Location"),
         ]
+        diag = self.sbc.diag_status
         diag_lines = [
-            "USB HID controller .... OK",
-            "LED interface .......... OK",
-            "Control channels ....... OK",
-            "Calibration cache ...... OK",
-            "Input matrix ........... OK",
+            f"USB HID controller .... {diag.get('usb', 'PENDING')}",
+            f"LED interface .......... {diag.get('led', 'PENDING')}",
+            f"Control channels ....... {diag.get('control', 'PENDING')}",
+            f"Calibration cache ...... {diag.get('calibration', 'PENDING')}",
+            f"Input matrix ........... {diag.get('input', 'PENDING')}",
             "Toggle States:",
         ]
         for key, label in toggle_labels:

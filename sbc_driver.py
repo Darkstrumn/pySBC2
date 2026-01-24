@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import time
+import random
 import usb.core
 import usb.util
 from collections import deque
@@ -44,6 +45,16 @@ class SBCDriver:
         self._last_flash_toggle = time.monotonic()
         self._flash_on = False
         self.ui = ui
+        self.usb_ok = False
+        self.touch_enabled = False
+        self.calibration_configured = False
+        self.diag_status = {
+            "usb": "PENDING",
+            "led": "PENDING",
+            "control": "PENDING",
+            "calibration": "PENDING",
+            "input": "PENDING",
+        }
         self.led_name_to_id = {
             "Eject": 4,
             "CockpitHatch": 5,
@@ -194,6 +205,8 @@ class SBCDriver:
         cfg = self.dev.get_active_configuration()
         self.ep_in = cfg[(self.INTERFACE, self.SETTING)][self.ENDPOINT_READER]
         self.ep_out = cfg[(self.INTERFACE, self.SETTING)][self.ENDPOINT_WRITER]
+        self.usb_ok = True
+        self.diag_status["usb"] = "OK"
 
     def read_raw(self):
         return self.dev.read(
@@ -654,6 +667,7 @@ class SBCDriver:
         if self.ui is not None:
             self.ui.set_boot_mode(True, stage="Boot", message="Initializing systems")
             self.ui.render(self.parse_raw_state(self.read_raw()))
+        self._run_boot_diagnostics()
         self._wait_for_button("CockpitHatch", "CockpitHatch")
         self._wait_for_toggles_on()
         self._wait_for_button("Ignition", "Ignition")
@@ -664,3 +678,63 @@ class SBCDriver:
         self.demo_led_sequence()
         if self.ui is not None:
             self.ui.set_boot_mode(False)
+
+    def _run_boot_diagnostics(self):
+        self._diag_usb()
+        self._diag_led_interface()
+        self._diag_control_channels()
+        self._diag_calibration()
+        self._diag_input_matrix()
+        if self.ui is not None:
+            self.ui.update_boot(stage="Diagnostics", message="Diagnostics complete")
+            self.ui.render(self.parse_raw_state(self.read_raw()))
+
+    def _diag_usb(self):
+        self.diag_status["usb"] = "OK" if self.usb_ok else "FAIL"
+
+    def _diag_led_interface(self):
+        try:
+            comm_names = {"Comm1", "Comm2", "Comm3", "Comm4", "Comm5"}
+            led_ids = [
+                led_id
+                for name, led_id in self.led_name_to_id.items()
+                if name not in comm_names
+            ]
+            random.shuffle(led_ids)
+            for led_id in led_ids:
+                for intensity in range(self.MIN_LIGHT_INTENSITY, self.MAX_LIGHT_INTENSITY + 1):
+                    self.set_led(led_id, intensity, send=False)
+                    self.write_leds()
+                    time.sleep(0.01)
+            for led_id in led_ids:
+                self.set_led(led_id, self.MIN_LIGHT_INTENSITY, send=False)
+            self.write_leds()
+            self.diag_status["led"] = "OK"
+        except Exception:
+            self.diag_status["led"] = "FAIL"
+
+    def _diag_control_channels(self):
+        try:
+            comm_names = ["Comm1", "Comm2", "Comm3", "Comm4", "Comm5"]
+            for name in comm_names:
+                led_id = self.led_name_to_id.get(name)
+                if led_id is None:
+                    continue
+                self.set_led(led_id, self.MAX_LIGHT_INTENSITY, send=False)
+                self.write_leds()
+                time.sleep(0.1)
+            for name in comm_names:
+                led_id = self.led_name_to_id.get(name)
+                if led_id is None:
+                    continue
+                self.set_led(led_id, self.MIN_LIGHT_INTENSITY, send=False)
+            self.write_leds()
+            self.diag_status["control"] = "OK"
+        except Exception:
+            self.diag_status["control"] = "FAIL"
+
+    def _diag_calibration(self):
+        self.diag_status["calibration"] = "OK" if self.calibration_configured else "NOT SET"
+
+    def _diag_input_matrix(self):
+        self.diag_status["input"] = "OK" if self.touch_enabled else "NOT SET"

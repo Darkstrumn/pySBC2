@@ -37,6 +37,9 @@ def apply_config(sbc, effective):
     sbc.GEAR_REVERSE_FLASH = bool(effective["gear_reverse_flash"])
     if isinstance(effective.get("analog"), dict):
         sbc.set_analog_config(effective["analog"])
+        sbc.calibration_configured = True
+    else:
+        sbc.calibration_configured = False
     led_mode = str(effective["led_mode"]).lower()
     led_modes = build_default_led_modes(sbc.led_name_to_id)
     if isinstance(effective.get("led_modes"), dict):
@@ -123,6 +126,7 @@ def main():
             int(effective.get("touch_width", 800)),
             int(effective.get("touch_height", 480)),
         )
+    sbc.touch_enabled = bool(touch and touch.enabled)
     errors = macro_engine.validate_macros()
     if errors:
         message = f"Macro errors: {errors[0]}"
