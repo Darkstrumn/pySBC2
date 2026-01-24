@@ -23,6 +23,7 @@ class ConsoleMFD:
         self.command_mode = False
         self.command_buf = ""
         self.command_result = ""
+        self.last_touch = None
         self.screen = curses.initscr()
         curses.noecho()
         curses.cbreak()
@@ -102,6 +103,7 @@ class ConsoleMFD:
                     self.tab = "settings"
 
     def handle_touch(self, x, y):
+        self.last_touch = (x, y)
         if y == 0:
             if 2 <= x <= 10:
                 self.tab = "status"
@@ -150,6 +152,9 @@ class ConsoleMFD:
             return
 
         data = build_dashboard(state, self.sbc)
+        if self.last_touch is not None:
+            tx, ty = self.last_touch
+            data["lines"].append(f"Touch: X:{tx:>3}  Y:{ty:>3}")
         data["pressed"].extend(self.sbc.get_held_controls(data["pressed"]))
         self._safe_add(3, 2, data["title"], self.color_accent)
         y = 4

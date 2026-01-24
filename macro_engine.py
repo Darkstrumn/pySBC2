@@ -6,9 +6,10 @@ from pathlib import Path
 
 
 class MacroEngine:
-    def __init__(self, config, sbc, ui=None):
+    def __init__(self, config, sbc, ui=None, event_sink=None):
         self.sbc = sbc
         self.ui = ui
+        self.event_sink = event_sink
         self.control_macros = config.get("control_macros", {})
         self.macros = config.get("macros", {})
         self.analog_zones = config.get("analog_zones", {})
@@ -70,12 +71,14 @@ class MacroEngine:
                 return
             self.ui_device.write(self.ecodes.EV_KEY, code, 1 if pressed else 0)
             self.ui_device.syn()
+            self._publish_event({"type": "macro_key", "key": key_name, "state": "down" if pressed else "up"})
             return
         state = "DOWN" if pressed else "UP"
         if self.ui is not None:
             self.ui.set_status(f"MACRO {state}: {key_name}")
         else:
             print(f"MACRO {state}: {key_name}")
+        self._publish_event({"type": "macro_key", "key": key_name, "state": "down" if pressed else "up"})
 
     def _press_keys(self, keys):
         for key in keys:
@@ -206,6 +209,16 @@ class MacroEngine:
                 prev_macro = self._resolve_macro(prev_action)
                 if prev_macro and prev_behavior == "hold":
                     self._run_hold_release(prev_macro)
+                self._publish_event(
+                    {
+                        "type": "analog_zone",
+                        "axis": axis_name,
+                        "value": value,
+                        "action": prev_action,
+                        "behavior": prev_behavior,
+                        "state": "exit",
+                    }
+                )
 
             if current_action:
                 macro = self._resolve_macro(current_action)
@@ -214,6 +227,16 @@ class MacroEngine:
                         self._run_tap(macro)
                     else:
                         self._run_hold_press(macro)
+                self._publish_event(
+                    {
+                        "type": "analog_zone",
+                        "axis": axis_name,
+                        "value": value,
+                        "action": current_action,
+                        "behavior": current_behavior,
+                        "state": "enter",
+                    }
+                )
 
             self.axis_active[axis_name] = (current_action, current_behavior)
 
@@ -242,18 +265,36 @@ class MacroEngine:
         if current_action == prev_action:
             return
 
-        if prev_action:
-            prev_macro = self._resolve_macro(prev_action)
-            if prev_macro and prev_behavior == "hold":
-                self._run_hold_release(prev_macro)
+            if prev_action:
+                prev_macro = self._resolve_macro(prev_action)
+                if prev_macro and prev_behavior == "hold":
+                    self._run_hold_release(prev_macro)
+                self._publish_event(
+                    {
+                        "type": "gear_zone",
+                        "gear": gear_value,
+                        "action": prev_action,
+                        "behavior": prev_behavior,
+                        "state": "exit",
+                    }
+                )
 
-        if current_action:
-            macro = self._resolve_macro(current_action)
-            if macro:
-                if current_behavior == "tap":
-                    self._run_tap(macro)
-                else:
-                    self._run_hold_press(macro)
+            if current_action:
+                macro = self._resolve_macro(current_action)
+                if macro:
+                    if current_behavior == "tap":
+                        self._run_tap(macro)
+                    else:
+                        self._run_hold_press(macro)
+                self._publish_event(
+                    {
+                        "type": "gear_zone",
+                        "gear": gear_value,
+                        "action": current_action,
+                        "behavior": current_behavior,
+                        "state": "enter",
+                    }
+                )
 
         self.gear_active = (current_action, current_behavior)
 
@@ -627,6 +668,13 @@ class MacroEngine:
             self._run_steps(macro, context="tap")
         else:
             self._run_tap(macro)
+
+    def _publish_event(self, payload):
+        if self.event_sink is not None:
+            try:
+                self.event_sink.publish(payload)
+            except Exception:
+                pass
 
     def _format_text(self, text):
         if "{var:" not in text:

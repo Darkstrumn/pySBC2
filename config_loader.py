@@ -26,6 +26,12 @@ def load_config(path):
         "powerup_macro": "powerup",
         "event_log_path": "sbc_events.log",
         "event_log_max_bytes": 131072,
+        "net_server": {
+            "enabled": False,
+            "host": "0.0.0.0",
+            "port": 8765,
+            "send_interval_ms": 20,
+        },
         "touch_device": "",
         "touch_width": 800,
         "touch_height": 480,

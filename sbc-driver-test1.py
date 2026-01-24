@@ -9,6 +9,7 @@ from sbc_driver import SBCDriver
 from ui_factory import init_ui
 from touch_input import TouchInput
 from gear_effects import GearEffectController
+from network_server import NetworkEventServer
 
 
 def parse_args(argv):
@@ -87,7 +88,33 @@ def main():
 
     ui = init_ui(ui_mode, sbc, effective, config, "sbc_config.json", reload_callback=reload_callback)
     sbc.ui = ui
-    macro_engine = MacroEngine(effective, sbc, ui=ui)
+    net_config = effective.get("net_server", {})
+    event_server = None
+    if isinstance(net_config, dict) and net_config.get("enabled"):
+        event_server = NetworkEventServer(
+            host=str(net_config.get("host", "0.0.0.0")),
+            port=int(net_config.get("port", 8765)),
+        )
+        event_server.start()
+        event_server.publish(
+            {
+                "type": "meta",
+                "button_names": sbc.button_names,
+                "analog_names": [
+                    "aim_x",
+                    "aim_y",
+                    "rotation",
+                    "sight_x",
+                    "sight_y",
+                    "left_pedal",
+                    "middle_pedal",
+                    "right_pedal",
+                ],
+                "tuner_name": "tuner",
+                "gear_name": "gear",
+            }
+        )
+    macro_engine = MacroEngine(effective, sbc, ui=ui, event_sink=event_server)
     gear_effects = GearEffectController(sbc, macro_engine, effective)
     touch = None
     if effective.get("touch_device"):
@@ -106,15 +133,23 @@ def main():
 
     if mode == "led":
         sbc.demo_led_sequence()
+        if event_server is not None:
+            event_server.stop()
         return
 
     if mode == "calibrate":
         calibrate_axes(sbc, config, "sbc_config.json")
+        if event_server is not None:
+            event_server.stop()
         return
 
     if mode == "read":
         sbc.startup_sequence()
         macro_engine.run_macro(effective.get("powerup_macro", ""))
+        send_interval = 0.0
+        last_send = 0.0
+        if isinstance(net_config, dict) and event_server is not None:
+            send_interval = max(0.0, float(net_config.get("send_interval_ms", 0)) / 1000.0)
         while True:
             buf = sbc.read_raw()
             state = sbc.parse_state(buf)
@@ -124,6 +159,28 @@ def main():
             macro_engine.handle_buttons(state, led_mode)
             macro_engine.handle_analogs(state)
             macro_engine.handle_gears(state)
+            if event_server is not None and send_interval >= 0:
+                now = time.monotonic()
+                if send_interval == 0 or now - last_send >= send_interval:
+                    event_server.publish(
+                        {
+                            "type": "raw_state",
+                            "buttons": [1 if pressed else 0 for pressed in state["buttons"]],
+                            "analogs": {
+                                "aim_x": state["aim_x"],
+                                "aim_y": state["aim_y"],
+                                "rotation": state["rotation"],
+                                "sight_x": state["sight_x"],
+                                "sight_y": state["sight_y"],
+                                "left_pedal": state["left_pedal"],
+                                "middle_pedal": state["middle_pedal"],
+                                "right_pedal": state["right_pedal"],
+                            },
+                            "tuner": state["tuner"],
+                            "gear": state["gear"],
+                        }
+                    )
+                    last_send = now
             if ui is not None:
                 ui.set_layer(macro_engine.layer)
                 if touch is not None:
@@ -141,6 +198,8 @@ def main():
                     ui.teardown()
                 if touch is not None:
                     touch.close()
+                if event_server is not None:
+                    event_server.stop()
                 return
             time.sleep(sbc.TIME_BETWEEN_POLLS_MS / 1000.0)
 
