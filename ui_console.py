@@ -219,7 +219,7 @@ class ConsoleMFD:
             ("ToggleBufferMaterial", "Buffer Material"),
             ("ToggleVTLocation", "VT Location"),
         ]
-        diag = self.sbc.diag_status
+        diag = getattr(self.sbc, "diag_status", {})
         diag_lines = [
             f"USB HID controller .... {diag.get('usb', 'PENDING')}",
             f"LED interface .......... {diag.get('led', 'PENDING')}",
