@@ -1,0 +1,15 @@
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\bin\Debug\net9.0\SbcSubscriberApp.exe
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\bin\Debug\net9.0\SbcSubscriberApp.deps.json
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\bin\Debug\net9.0\SbcSubscriberApp.runtimeconfig.json
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\bin\Debug\net9.0\SbcSubscriberApp.dll
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\bin\Debug\net9.0\SbcSubscriberApp.pdb
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\obj\Debug\net9.0\SbcSubscriberApp.GeneratedMSBuildEditorConfig.editorconfig
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\obj\Debug\net9.0\SbcSubscriberApp.AssemblyInfoInputs.cache
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\obj\Debug\net9.0\SbcSubscriberApp.AssemblyInfo.cs
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\obj\Debug\net9.0\SbcSubscriberApp.csproj.CoreCompileInputs.cache
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\obj\Debug\net9.0\SbcSubscriberApp.sourcelink.json
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\obj\Debug\net9.0\SbcSubscriberApp.dll
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\obj\Debug\net9.0\refint\SbcSubscriberApp.dll
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\obj\Debug\net9.0\SbcSubscriberApp.pdb
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\obj\Debug\net9.0\SbcSubscriberApp.genruntimeconfig.cache
+U:\TheHold\DevCore\ProtoLab\python\sbc\SbcSubscriberApp\obj\Debug\net9.0\ref\SbcSubscriberApp.dll
