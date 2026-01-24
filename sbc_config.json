@@ -1,0 +1,151 @@
+{
+  "active_profile": "default",
+  "profiles": {
+    "default": {
+      "led_mode": "toggle",
+      "led_modes": {
+        "Eject": "flash",
+        "CockpitHatch": "flash",
+        "Ignition": "flash",
+        "Start": "flash",
+        "OpenClose": "toggle",
+        "MapZoomInOut": "momentary",
+        "ModeSelect": "momentary",
+        "SubMonitorModeSelect": "momentary",
+        "MainMonitorZoomIn": "momentary",
+        "MainMonitorZoomOut": "momentary",
+        "ForecastShootingSystem": "momentary",
+        "Manipulator": "momentary",
+        "LineColorChange": "momentary",
+        "Washing": "momentary",
+        "Extinguisher": "momentary",
+        "Chaff": "momentary",
+        "TankDetach": "flash",
+        "Override": "toggle",
+        "NightScope": "toggle",
+        "F1": "latched:F2,F3",
+        "F2": "toggle",
+        "F3": "toggle",
+        "MainWeaponControl": "latched:SubWeaponControl",
+        "SubWeaponControl": "latched:MainWeaponControl",
+        "MagazineChange": "momentary",
+        "Comm1": "toggle",
+        "Comm2": "toggle",
+        "Comm3": "toggle",
+        "Comm4": "toggle",
+        "Comm5": "toggle",
+        "RightJoyMainWeapon": "",
+        "RightJoyFire": "",
+        "RightJoyLockOn": "",
+        "LeftJoySightChange": "",
+        "ToggleFilterControl": "",
+        "ToggleOxygenSupply": "",
+        "ToggleFuelFlowRate": "",
+        "ToggleBufferMaterial": "",
+        "ToggleVTLocation": "",
+        "GearR": "toggle",
+        "GearN": "toggle",
+        "Gear1": "toggle",
+        "Gear2": "toggle",
+        "Gear3": "toggle",
+        "Gear4": "toggle",
+        "Gear5": "toggle"
+      },
+      "flash_period_s": 0.3,
+      "poll_interval_ms": 4,
+      "update_gear_lights": true,
+      "gear_light_intensity": 8,
+      "gear_reverse_flash": true,
+      "gear_r_blink_period_ms": 500,
+      "gear_r_blink_on_ms": 250,
+      "gear5_breathe_period_ms": 2000,
+      "gear5_breathe_min": 0,
+      "gear5_breathe_max": 15,
+      "persist_vars": false,
+      "persist_var_names": [],
+      "persist_var_path": "macro_vars.json",
+      "sound_enabled": true,
+      "sound_base_path": "sounds",
+      "tts_enabled": true,
+      "tts_voice": "",
+      "powerup_macro": "powerup",
+      "event_log_path": "sbc_events.log",
+      "event_log_max_bytes": 131072,
+      "macro_output": "log",
+      "control_macros": {
+        "Eject": { "action": "ELITE_ABORT", "behavior": "from_led" },
+        "CockpitHatch": { "action": "ELITE_LANDING_GEAR", "behavior": "from_led" },
+        "Ignition": { "action": "ELITE_HARDPOINTS", "behavior": "from_led" },
+        "Start": { "action": "ELITE_TARGET_AHEAD", "behavior": "from_led" },
+        "ToggleFilterControl": { "action": "KEY_F13", "behavior": "from_led" },
+        "ToggleOxygenSupply": { "action": "KEY_F14", "behavior": "from_led" },
+        "ToggleFuelFlowRate": { "action": "KEY_F15", "behavior": "from_led" },
+        "ToggleBufferMaterial": { "action": "KEY_F16", "behavior": "from_led" },
+        "ToggleVTLocation": { "action": "KEY_F17", "behavior": "from_led" }
+      },
+      "macros": {
+        "powerup": [
+          { "sound_play": { "file": "powerup.wav" } },
+          {
+            "if": "is_set('user_name')",
+            "then": [ { "tts_say": { "text": "Welcome, {var:user_name}." } } ],
+            "else": [ { "tts_say": { "text": "Welcome, pilot." } } ]
+          }
+        ],
+        "ELITE_ABORT": { "keys": ["KEY_LEFTCTRL", "KEY_F"], "press_ms": 40, "release_ms": 40 },
+        "ELITE_LANDING_GEAR": { "keys": ["KEY_L"], "press_ms": 40, "release_ms": 40 },
+        "ELITE_HARDPOINTS": { "keys": ["KEY_U"], "press_ms": 40, "release_ms": 40 },
+        "ELITE_TARGET_AHEAD": { "keys": ["KEY_T"], "press_ms": 40, "release_ms": 40 },
+        "KEY_F13": { "keys": ["KEY_F13"], "press_ms": 40, "release_ms": 40 },
+        "KEY_F14": { "keys": ["KEY_F14"], "press_ms": 40, "release_ms": 40 },
+        "KEY_F15": { "keys": ["KEY_F15"], "press_ms": 40, "release_ms": 40 },
+        "KEY_F16": { "keys": ["KEY_F16"], "press_ms": 40, "release_ms": 40 },
+        "KEY_F17": { "keys": ["KEY_F17"], "press_ms": 40, "release_ms": 40 },
+        "ELITE_THROTTLE_0": { "keys": ["KEY_X"], "press_ms": 40, "release_ms": 40 },
+        "ELITE_THROTTLE_25": { "keys": ["KEY_1"], "press_ms": 40, "release_ms": 40 },
+        "ELITE_THROTTLE_50": { "keys": ["KEY_2"], "press_ms": 40, "release_ms": 40 },
+        "ELITE_THROTTLE_75": { "keys": ["KEY_3"], "press_ms": 40, "release_ms": 40 },
+        "ELITE_THROTTLE_100": { "keys": ["KEY_4"], "press_ms": 40, "release_ms": 40 },
+        "ELITE_HYPERSPACE": { "keys": ["KEY_J"], "press_ms": 40, "release_ms": 40 }
+      },
+      "analog_zones": {
+        "aim_x": [
+          { "min": -512, "max": -171, "action": "KEY_LEFT", "behavior": "hold" },
+          { "min": 171, "max": 511, "action": "KEY_RIGHT", "behavior": "hold" }
+        ],
+        "aim_y": [
+          { "min": -512, "max": -171, "action": "KEY_UP", "behavior": "hold" },
+          { "min": 171, "max": 511, "action": "KEY_DOWN", "behavior": "hold" }
+        ],
+        "tuner": [
+          { "min": 0, "max": 0, "action": "KEY_F20", "behavior": "hold" },
+          { "min": 1, "max": 1, "action": "KEY_F20", "behavior": "hold" },
+          { "min": 2, "max": 2, "action": "KEY_F20", "behavior": "hold" },
+          { "min": 3, "max": 3, "action": "KEY_F20", "behavior": "hold" },
+          { "min": 4, "max": 7, "action": "KEY_F21", "behavior": "hold" },
+          { "min": 8, "max": 11, "action": "KEY_F22", "behavior": "hold" },
+          { "min": 12, "max": 15, "action": "KEY_F23", "behavior": "hold" }
+        ]
+      },
+      "analog": {
+        "aim_x": { "center": 512, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": -512, "max": 511, "calibration_samples": 20 },
+        "aim_y": { "center": 512, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": -512, "max": 511, "calibration_samples": 20 },
+        "rotation": { "center": 0, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": -512, "max": 511, "calibration_samples": 20 },
+        "sight_x": { "center": 0, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": -512, "max": 511, "calibration_samples": 20 },
+        "sight_y": { "center": 0, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": -512, "max": 511, "calibration_samples": 20 },
+        "left_pedal": { "center": 0, "deadzone": 0, "deadzone_mode": "low", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": 0, "max": 1023, "calibration_samples": 20 },
+        "middle_pedal": { "center": 0, "deadzone": 150, "deadzone_mode": "low", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": 0, "max": 1023, "calibration_samples": 20 },
+        "right_pedal": { "center": 0, "deadzone": 0, "deadzone_mode": "low", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": 0, "max": 1023, "calibration_samples": 20 }
+      },
+      "gear_zones": [
+        { "value": -2, "action": "ELITE_THROTTLE_0", "behavior": "tap" },
+        { "value": -1, "action": "ELITE_THROTTLE_0", "behavior": "tap" },
+        { "value": 1, "action": "ELITE_THROTTLE_25", "behavior": "tap" },
+        { "value": 2, "action": "ELITE_THROTTLE_50", "behavior": "tap" },
+        { "value": 3, "action": "ELITE_THROTTLE_75", "behavior": "tap" },
+        { "value": 4, "action": "ELITE_THROTTLE_100", "behavior": "tap" },
+        { "value": 5, "action": "ELITE_HYPERSPACE", "behavior": "tap" }
+      ]
+    }
+  }
+}
