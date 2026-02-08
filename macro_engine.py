@@ -4,12 +4,27 @@ import json
 import subprocess
 from pathlib import Path
 
+"""
+Macro dispatch engine.
+
+Responsibilities:
+- map controls/analog zones/gear zones to macro actions
+- execute key macros and scripted step macros
+- expose expression-based conditions and small state variable store
+- drive LED effects and optional audio/TTS feedback
+- publish macro/zone events and consume queued synthetic input events
+"""
+
 
 class MacroEngine:
-    def __init__(self, config, sbc, ui=None, event_sink=None):
+    """Runtime macro orchestrator used by the main polling loop."""
+
+    def __init__(self, config, sbc, ui=None, event_sink=None, input_matrix=None):
+        """Initialize macro mappings, outputs, persistence, and optional backends."""
         self.sbc = sbc
         self.ui = ui
         self.event_sink = event_sink
+        self.input_matrix = input_matrix
         self.control_macros = config.get("control_macros", {})
         self.macros = config.get("macros", {})
         self.analog_zones = config.get("analog_zones", {})
@@ -56,6 +71,7 @@ class MacroEngine:
         self._init_tts()
 
     def _collect_keys(self):
+        """Collect all key codes referenced by key-based macros for uinput setup."""
         keys = set()
         for macro in self.macros.values():
             for key in macro.get("keys", []):
@@ -65,6 +81,7 @@ class MacroEngine:
         return list(keys)
 
     def _emit(self, key_name, pressed):
+        """Emit key transition via uinput or fallback logger/UI status."""
         if self.output_mode == "uinput" and self.ui_device and self.ecodes:
             code = getattr(self.ecodes, key_name, None)
             if code is None:
@@ -93,6 +110,7 @@ class MacroEngine:
                 self.active_keys.remove(key)
 
     def _resolve_macro(self, action_name):
+        """Resolve action name to macro definition; supports direct KEY_* fallback."""
         if action_name in self.macros:
             return self.macros[action_name]
         if action_name.startswith("KEY_"):
@@ -100,6 +118,7 @@ class MacroEngine:
         return None
 
     def _run_tap(self, macro, press_ms=None, release_ms=None):
+        """Execute a tap-style key macro (press, delay, release, delay)."""
         keys = macro.get("keys", [])
         if not keys:
             return
@@ -121,69 +140,83 @@ class MacroEngine:
             self._release_keys(keys)
 
     def _behavior_from_led(self, led_name, default_led_mode):
+        """Infer tap/hold behavior from LED mode semantics."""
         led_mode_raw = self.sbc.led_modes.get(led_name, default_led_mode)
         led_mode, _ = self.sbc._parse_led_mode(led_mode_raw)
         return "hold" if led_mode in ("flash", "momentary") else "tap"
 
-    def handle_buttons(self, state, default_led_mode):
-        for control_name, mapping in self.control_macros.items():
-            if isinstance(mapping, str):
-                action_name = mapping
-                behavior = "from_led"
-                press_ms = None
-                release_ms = None
-            elif isinstance(mapping, dict):
-                action_name = mapping.get("action")
-                behavior = mapping.get("behavior", "from_led")
-                press_ms = mapping.get("press_ms")
-                release_ms = mapping.get("release_ms")
-            elif isinstance(mapping, list):
-                index = self.layer % len(mapping) if mapping else 0
-                action_name = mapping[index] if mapping else None
-                behavior = "from_led"
-                press_ms = None
-                release_ms = None
+    def _resolve_control_action(self, control_name):
+        """Resolve control mapping shape (string/dict/layer list) for one control."""
+        mapping = self.control_macros.get(control_name)
+        if isinstance(mapping, str):
+            return mapping, "from_led", None, None
+        if isinstance(mapping, dict):
+            return (
+                mapping.get("action"),
+                mapping.get("behavior", "from_led"),
+                mapping.get("press_ms"),
+                mapping.get("release_ms"),
+            )
+        if isinstance(mapping, list):
+            index = self.layer % len(mapping) if mapping else 0
+            action_name = mapping[index] if mapping else None
+            return action_name, "from_led", None, None
+        return None, None, None, None
+
+    def _dispatch_action(self, macro, behavior, changed, pressed, press_ms=None, release_ms=None):
+        """Run macro action for resolved behavior and edge direction."""
+        if macro is None or not changed:
+            return
+        if isinstance(macro, list):
+            if behavior == "tap":
+                if pressed:
+                    self._run_steps(macro, context="tap")
+            elif behavior == "hold":
+                if pressed:
+                    self._run_steps(macro, context="down")
+                else:
+                    self._run_steps(macro, context="up")
+            return
+        if behavior == "tap":
+            if pressed:
+                self._run_tap(macro, press_ms, release_ms)
+        elif behavior == "hold":
+            if pressed:
+                self._run_hold_press(macro)
             else:
-                continue
+                self._run_hold_release(macro)
 
-            if not action_name:
-                continue
+    def handle_button_event(self, control_name, pressed, changed=True, default_led_mode="toggle"):
+        """Dispatch one control edge event through configured macro mapping."""
+        action_name, behavior, press_ms, release_ms = self._resolve_control_action(control_name)
+        if not action_name or behavior is None:
+            return
 
+        led_name = self.sbc.button_to_led_name.get(
+            self.sbc.button_name_to_index.get(control_name, -1),
+            control_name,
+        )
+        if behavior == "from_led":
+            behavior = self._behavior_from_led(led_name, default_led_mode)
+
+        macro = self._resolve_macro(action_name)
+        if macro is None:
+            return
+        self._dispatch_action(macro, behavior, changed, pressed, press_ms, release_ms)
+
+    def handle_buttons(self, state, default_led_mode):
+        """Process configured control mappings from physical button edge state."""
+        for control_name in self.control_macros.keys():
             index = self.sbc.button_name_to_index.get(control_name)
             if index is None:
                 continue
 
             pressed = self.sbc.get_button_state(index)
             changed = self.sbc.button_changed(index)
-
-            led_name = self.sbc.button_to_led_name.get(index, control_name)
-            if behavior == "from_led":
-                behavior = self._behavior_from_led(led_name, default_led_mode)
-
-            macro = self._resolve_macro(action_name)
-            if macro is None:
-                continue
-
-            if isinstance(macro, list):
-                if behavior == "tap":
-                    if changed and pressed:
-                        self._run_steps(macro, context="tap")
-                elif behavior == "hold":
-                    if changed and pressed:
-                        self._run_steps(macro, context="down")
-                    elif changed and not pressed:
-                        self._run_steps(macro, context="up")
-            else:
-                if behavior == "tap":
-                    if changed and pressed:
-                        self._run_tap(macro, press_ms, release_ms)
-                elif behavior == "hold":
-                    if changed and pressed:
-                        self._run_hold_press(macro)
-                    elif changed and not pressed:
-                        self._run_hold_release(macro)
+            self.handle_button_event(control_name, pressed, changed, default_led_mode)
 
     def handle_analogs(self, state):
+        """Apply analog zone transitions and run enter/exit behavior macros."""
         for axis_name, zones in self.analog_zones.items():
             value = state.get(axis_name)
             if value is None:
@@ -241,6 +274,7 @@ class MacroEngine:
             self.axis_active[axis_name] = (current_action, current_behavior)
 
     def handle_gears(self, state):
+        """Apply gear zone transitions and run associated macros."""
         gear_value = state.get("gear")
         if gear_value is None:
             return
@@ -299,6 +333,7 @@ class MacroEngine:
         self.gear_active = (current_action, current_behavior)
 
     def handle_layer_cycle(self):
+        """Advance control layer when configured layer-cycle button is pressed."""
         idx = self.sbc.button_name_to_index.get(self.layer_cycle_button)
         if idx is None:
             return
@@ -313,6 +348,7 @@ class MacroEngine:
         return max_len
 
     def tick(self):
+        """Update active LED effects each frame."""
         now = time.monotonic()
         to_remove = []
         for led_name, effect in self.led_effects.items():
@@ -338,6 +374,12 @@ class MacroEngine:
             self.led_effects.pop(name, None)
 
     def _run_steps(self, steps, context="tap"):
+        """
+        Execute scripted macro steps.
+
+        Supported steps include conditionals, timing, vars, layered controls,
+        key actions, LED effects, audio/TTS, and input queue operations.
+        """
         for step in steps:
             if "if" in step:
                 expr = step.get("if", "")
@@ -362,6 +404,9 @@ class MacroEngine:
                 if isinstance(payload, dict):
                     self.vars[payload.get("name")] = payload.get("value")
                     self._save_persisted_vars()
+                continue
+            if "run_macro" in step:
+                self.run_macro(step["run_macro"])
                 continue
             if "press" in step:
                 payload = step["press"]
@@ -425,8 +470,30 @@ class MacroEngine:
                 if text:
                     self._tts_say(self._format_text(text))
                 continue
+            if "queue_button" in step:
+                payload = step["queue_button"]
+                if isinstance(payload, dict) and self.input_matrix is not None:
+                    control_name = payload.get("control")
+                    pressed = bool(payload.get("pressed", True))
+                    self.input_matrix.queue_button(
+                        control_name,
+                        pressed,
+                        source="macro",
+                        payload={"context": context},
+                    )
+                continue
+            if "queue_macro" in step:
+                macro_name = step["queue_macro"]
+                if self.input_matrix is not None:
+                    self.input_matrix.queue_macro(
+                        macro_name,
+                        source="macro",
+                        payload={"context": context},
+                    )
+                continue
 
     def _eval_expr(self, expr):
+        """Safely evaluate constrained expression syntax for scripted conditions."""
         try:
             tree = ast.parse(expr, mode="eval")
         except SyntaxError:
@@ -436,6 +503,7 @@ class MacroEngine:
         return self._eval_node(tree.body)
 
     def _eval_node(self, node):
+        """Evaluate validated expression AST nodes against runtime values."""
         if isinstance(node, ast.BoolOp):
             vals = [self._eval_node(v) for v in node.values]
             if isinstance(node.op, ast.And):
@@ -506,6 +574,7 @@ class MacroEngine:
         return False
 
     def validate_macros(self):
+        """Validate configured macro structures and scripted step schema."""
         errors = []
         for name, macro in self.macros.items():
             if isinstance(macro, list):
@@ -518,6 +587,7 @@ class MacroEngine:
         return errors
 
     def reload_config(self, config):
+        """Reload runtime macro-related config values without process restart."""
         self.control_macros = config.get("control_macros", {})
         self.macros = config.get("macros", {})
         self.analog_zones = config.get("analog_zones", {})
@@ -552,6 +622,7 @@ class MacroEngine:
             pass
 
     def _validate_steps(self, macro_name, steps):
+        """Schema validation for scripted macro step arrays."""
         errors = []
         for idx, step in enumerate(steps):
             if not isinstance(step, dict):
@@ -565,6 +636,7 @@ class MacroEngine:
                 "set_layer",
                 "cycle_layer",
                 "set_var",
+                "run_macro",
                 "press",
                 "down",
                 "up",
@@ -573,6 +645,8 @@ class MacroEngine:
                 "led_breathe",
                 "sound_play",
                 "tts_say",
+                "queue_button",
+                "queue_macro",
             }
             unknown = set(step.keys()) - allowed
             if unknown:
@@ -597,6 +671,8 @@ class MacroEngine:
                 errors.append(f"{macro_name}[{idx}]: sound_play must be object")
             if "tts_say" in step and not isinstance(step["tts_say"], dict):
                 errors.append(f"{macro_name}[{idx}]: tts_say must be object")
+            if "queue_button" in step and not isinstance(step["queue_button"], dict):
+                errors.append(f"{macro_name}[{idx}]: queue_button must be object")
         return errors
 
     def _validate_expr(self, expr):
@@ -637,6 +713,7 @@ class MacroEngine:
         return False
 
     def _load_persisted_vars(self):
+        """Load configured persisted variables from disk."""
         if not self.persist_enabled or not self.persist_names:
             return
         if not self.persist_path.exists():
@@ -650,6 +727,7 @@ class MacroEngine:
                 self.vars[name] = data[name]
 
     def _save_persisted_vars(self):
+        """Persist configured variable subset to disk."""
         if not self.persist_enabled or not self.persist_names:
             return
         payload = {name: self.vars.get(name) for name in self.persist_names}
@@ -659,6 +737,7 @@ class MacroEngine:
             pass
 
     def run_macro(self, name):
+        """Run one macro by name, handling key or scripted definitions."""
         if not name:
             return
         macro = self._resolve_macro(name)
@@ -670,6 +749,7 @@ class MacroEngine:
             self._run_tap(macro)
 
     def _publish_event(self, payload):
+        """Publish macro runtime events to optional external sink."""
         if self.event_sink is not None:
             try:
                 self.event_sink.publish(payload)
@@ -677,6 +757,7 @@ class MacroEngine:
                 pass
 
     def _format_text(self, text):
+        """Expand `{var:name}` placeholders from current macro variable state."""
         if "{var:" not in text:
             return text
         out = text
@@ -686,6 +767,7 @@ class MacroEngine:
         return out
 
     def _init_sound(self):
+        """Initialize pygame mixer backend if sound output is enabled."""
         if not self.sound_enabled:
             self._sound_backend = None
             return
@@ -701,6 +783,7 @@ class MacroEngine:
             self._sound_backend = None
 
     def _sound_play(self, file_name):
+        """Play configured sound file or emit visual/log fallback on failure."""
         if self._sound_backend is None:
             if self.ui is not None:
                 self.ui.set_status("Sound backend unavailable")
@@ -719,6 +802,7 @@ class MacroEngine:
             self._log_event(f"sound_error:{path}")
 
     def _init_tts(self):
+        """Initialize TTS backend preference order: pyttsx3, then espeak."""
         if not self.tts_enabled:
             self._tts_backend = None
             return
@@ -738,6 +822,7 @@ class MacroEngine:
         self._tts_backend = ("espeak", None)
 
     def _tts_say(self, text):
+        """Speak text via active TTS backend, with visual/log fallback on errors."""
         if not self.tts_enabled:
             return
         if self._tts_backend is None:
@@ -769,6 +854,7 @@ class MacroEngine:
                 self._log_event("tts_error")
 
     def _visual_fallback(self, message):
+        """Fallback LED cue when audio/TTS action fails."""
         if "Eject" in self.sbc.led_name_to_id:
             self.led_effects["Eject"] = {
                 "type": "blink",
@@ -780,6 +866,7 @@ class MacroEngine:
             }
 
     def _log_event(self, text):
+        """Append message to bounded rolling event log."""
         try:
             entry = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}\n"
             existing = b""

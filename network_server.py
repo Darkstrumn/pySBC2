@@ -4,8 +4,17 @@ import socketserver
 import threading
 import time
 
+"""
+Lightweight newline-delimited JSON event server.
+
+Used as an optional event sink for telemetry/state streams so external clients
+can observe controller, macro, and vessel-model activity in near real time.
+"""
+
 
 class _ClientHandler(socketserver.BaseRequestHandler):
+    """Per-client handler that keeps connection alive until disconnect/stop."""
+
     def setup(self):
         self.request.settimeout(1.0)
         self.server._add_client(self.request)
@@ -32,6 +41,8 @@ class _ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 
 class NetworkEventServer:
+    """Threaded TCP broadcaster for NDJSON event payloads."""
+
     def __init__(self, host="0.0.0.0", port=8765):
         self.host = host
         self.port = port
@@ -46,16 +57,19 @@ class NetworkEventServer:
         self._thread = None
 
     def start(self):
+        """Start serving in a daemon thread."""
         self._server._stopping = False
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
 
     def stop(self):
+        """Stop server and close sockets."""
         self._server._stopping = True
         self._server.shutdown()
         self._server.server_close()
 
     def publish(self, payload):
+        """Broadcast payload to all connected clients."""
         payload = dict(payload)
         payload.setdefault("timestamp_ms", int(time.time() * 1000))
         data = (json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8")

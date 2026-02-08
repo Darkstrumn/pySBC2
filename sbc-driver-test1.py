@@ -1,4 +1,17 @@
 #!/usr/bin/python3
+"""
+Runtime entrypoint for SBC controller operation.
+
+High-level flow:
+1. Load config + active profile and initialize hardware/UI/network.
+2. Run startup sequence, then optional powerup macro.
+3. Main loop reads controller state, updates LEDs/logical states, dispatches:
+   - physical controls -> macro engine
+   - physical edges -> vessel model
+   - queued synthetic events -> macro engine
+4. Publish telemetry, render UI, and handle graceful shutdown condition.
+"""
+
 import sys
 import time
 
@@ -10,9 +23,12 @@ from ui_factory import init_ui
 from touch_input import TouchInput
 from gear_effects import GearEffectController
 from network_server import NetworkEventServer
+from input_matrix import InputMatrix
+from vessel_models import build_vessel_model
 
 
 def parse_args(argv):
+    """Parse CLI mode (`read|led|calibrate`) and requested UI backend."""
     mode = "read"
     ui_mode = "console"
     args = argv[1:]
@@ -31,6 +47,7 @@ def parse_args(argv):
 
 
 def apply_config(sbc, effective):
+    """Apply effective profile settings to driver instance and return base LED mode."""
     sbc.FLASH_PERIOD_S = float(effective["flash_period_s"])
     sbc.TIME_BETWEEN_POLLS_MS = int(effective["poll_interval_ms"])
     sbc.set_gear_lights(effective["update_gear_lights"], effective["gear_light_intensity"])
@@ -54,6 +71,7 @@ def apply_config(sbc, effective):
 
 
 def build_effective_config(config):
+    """Merge root config with currently active profile overrides."""
     active_profile = str(config.get("active_profile", "default"))
     profile_data = {}
     if isinstance(config.get("profiles"), dict):
@@ -65,6 +83,7 @@ def build_effective_config(config):
 
 
 def main():
+    """Initialize runtime subsystems and execute selected operation mode."""
     mode, ui_mode = parse_args(sys.argv)
     config = load_config("sbc_config.json")
     effective = build_effective_config(config)
@@ -72,19 +91,27 @@ def main():
     sbc = SBCDriver()
     led_mode = apply_config(sbc, effective)
     sbc.open()
+    macro_engine = None
+    vessel_model = None
+    ui = None
 
     def reload_callback(vars_only=False, clear_vars=False):
         nonlocal led_mode
         if clear_vars:
-            macro_engine.clear_persisted_vars()
+            if macro_engine is not None:
+                macro_engine.clear_persisted_vars()
             return
         if vars_only:
-            macro_engine.reload_vars()
+            if macro_engine is not None:
+                macro_engine.reload_vars()
             return
         cfg = load_config("sbc_config.json")
         eff = build_effective_config(cfg)
         led_mode = apply_config(sbc, eff)
-        macro_engine.reload_config(eff)
+        if macro_engine is not None:
+            macro_engine.reload_config(eff)
+        if vessel_model is not None:
+            vessel_model.reload_config(eff)
         if ui is not None:
             ui.config_root = cfg
             ui.config_view = eff
@@ -114,10 +141,15 @@ def main():
                     "right_pedal",
                 ],
                 "tuner_name": "tuner",
-                "gear_name": "gear",
-            }
-        )
-    macro_engine = MacroEngine(effective, sbc, ui=ui, event_sink=event_server)
+                    "gear_name": "gear",
+                }
+            )
+    input_matrix = InputMatrix(
+        event_sink=event_server,
+        max_events=int(effective.get("input_queue_size", 256)),
+    )
+    macro_engine = MacroEngine(effective, sbc, ui=ui, event_sink=event_server, input_matrix=input_matrix)
+    vessel_model = build_vessel_model(effective, input_matrix=input_matrix, event_sink=event_server)
     gear_effects = GearEffectController(sbc, macro_engine, effective)
     touch = None
     if effective.get("touch_device"):
@@ -149,20 +181,49 @@ def main():
 
     if mode == "read":
         sbc.startup_sequence()
+        vessel_model.on_boot_complete()
         macro_engine.run_macro(effective.get("powerup_macro", ""))
         send_interval = 0.0
         last_send = 0.0
         if isinstance(net_config, dict) and event_server is not None:
             send_interval = max(0.0, float(net_config.get("send_interval_ms", 0)) / 1000.0)
         while True:
+            # Acquire and normalize controller state for this frame.
             buf = sbc.read_raw()
             state = sbc.parse_state(buf)
             sbc.handle_button_leds(led_mode)
             sbc.update_logical_states(led_mode)
+
+            # Feed semantic vessel model with physical control edge events.
+            for control_name, index in sbc.button_name_to_index.items():
+                if sbc.button_changed(index):
+                    vessel_model.on_control_change(
+                        control_name,
+                        sbc.get_button_state(index),
+                        logical_state=sbc.get_logical_state(control_name),
+                    )
+            vessel_model.tick()
+
+            # Standard macro dispatch from physical controls and analog/gear zones.
             macro_engine.handle_layer_cycle()
             macro_engine.handle_buttons(state, led_mode)
             macro_engine.handle_analogs(state)
             macro_engine.handle_gears(state)
+
+            # Drain queued synthetic events so automation behaves like user input.
+            for queued in input_matrix.drain():
+                event_type = queued.get("type")
+                if event_type == "button":
+                    macro_engine.handle_button_event(
+                        queued.get("control"),
+                        bool(queued.get("pressed")),
+                        changed=True,
+                        default_led_mode=led_mode,
+                    )
+                elif event_type == "macro":
+                    macro_engine.run_macro(queued.get("macro"))
+
+            # Publish periodic raw-state telemetry if network server is active.
             if event_server is not None and send_interval >= 0:
                 now = time.monotonic()
                 if send_interval == 0 or now - last_send >= send_interval:
@@ -185,6 +246,8 @@ def main():
                         }
                     )
                     last_send = now
+
+            # UI updates, gear effects, and shutdown handling.
             if ui is not None:
                 ui.set_layer(macro_engine.layer)
                 if touch is not None:

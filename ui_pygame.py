@@ -1,8 +1,13 @@
 from ui_common import build_dashboard
 
+"""Pygame-based MFD UI backend."""
+
 
 class PygameMFD:
+    """Graphical dashboard UI used as an alternative to curses console UI."""
+
     def __init__(self, sbc):
+        """Initialize pygame window, fonts, colors, and runtime UI state."""
         self.sbc = sbc
         try:
             import pygame as _pygame
@@ -29,12 +34,14 @@ class PygameMFD:
         self.layer = 0
 
     def teardown(self):
+        """Shut down pygame cleanly."""
         try:
             self.pygame.quit()
         except Exception:
             pass
 
     def set_boot_mode(self, enabled, stage="", message=""):
+        """Switch into/out of boot status view."""
         self.boot_mode = enabled
         self.boot_stage = stage
         self.boot_message = message
@@ -42,6 +49,7 @@ class PygameMFD:
             self.status_message = ""
 
     def update_boot(self, stage=None, message=None):
+        """Update boot status text."""
         if stage is not None:
             self.boot_stage = stage
         if message is not None:
@@ -49,12 +57,15 @@ class PygameMFD:
             self.status_message = ""
 
     def set_status(self, message):
+        """Set transient status message."""
         self.status_message = message
 
     def set_layer(self, layer):
+        """Expose active macro layer in UI."""
         self.layer = layer
 
     def render(self, state):
+        """Render one frame from current parsed state."""
         for event in self.pygame.event.get():
             if event.type == self.pygame.QUIT:
                 return
@@ -88,6 +99,7 @@ class PygameMFD:
         self.clock.tick(30)
 
     def handle_touch(self, x, y):
+        """Placeholder touch tab mapping; kept for API parity with console UI."""
         if y <= 30:
             if 0 <= x <= 120:
                 self.tab = "status"
@@ -95,6 +107,7 @@ class PygameMFD:
                 self.tab = "settings"
 
     def _render_boot(self):
+        """Render simplified boot status page."""
         spinner = ["-", "\\", "|", "/"][self._boot_spinner % 4]
         self._boot_spinner += 1
         self.screen.fill(self.bg)

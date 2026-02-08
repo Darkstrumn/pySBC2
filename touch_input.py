@@ -1,4 +1,16 @@
+"""Simple evdev touch adapter that emits screen-space tap coordinates."""
+
+
 class TouchInput:
+    """
+    Touch reader abstraction.
+
+    Behavior:
+    - Reads absolute touch events from an input device.
+    - Scales raw device coordinates to configured screen dimensions.
+    - Returns a point only on touch release, suitable for UI click semantics.
+    """
+
     def __init__(self, device_path, screen_width, screen_height):
         self.device_path = device_path
         self.screen_width = screen_width
@@ -25,6 +37,7 @@ class TouchInput:
             self.enabled = False
 
     def close(self):
+        """Release device grab when shutting down."""
         if self.device is None:
             return
         try:
@@ -33,6 +46,7 @@ class TouchInput:
             pass
 
     def _scale(self, value, abs_info, target_max):
+        """Map raw absolute axis values into [0, target_max)."""
         if abs_info is None:
             return None
         span = abs_info.max - abs_info.min
@@ -41,6 +55,7 @@ class TouchInput:
         return int((value - abs_info.min) * (target_max - 1) / span)
 
     def poll(self):
+        """Return `(x, y)` on touch release, else `None`."""
         if not self.enabled or self.device is None:
             return None
         try:

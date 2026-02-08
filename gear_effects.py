@@ -1,7 +1,16 @@
 import time
 
+"""Gear-specific LED behavior coordinator layered on top of macro LED effects."""
+
 
 class GearEffectController:
+    """
+    Applies symbolic gear light effects:
+    - reverse gear: blink `GearR`
+    - gear 5: breathe `Gear5`
+    - otherwise: static gear indicator LEDs
+    """
+
     def __init__(self, sbc, macro_engine, config):
         self.sbc = sbc
         self.macro_engine = macro_engine
@@ -9,6 +18,7 @@ class GearEffectController:
         self._active_effect = None
 
     def update(self, gear_value):
+        """Update gear lighting based on current parsed gear value."""
         if self.sbc.GEAR_REVERSE_FLASH and gear_value == -2:
             self.sbc.update_gear_leds(None, self.sbc.gear_light_intensity)
             period = int(self.config.get("gear_r_blink_period_ms", 500))
@@ -27,6 +37,7 @@ class GearEffectController:
         self.sbc.update_gear_leds(gear_value, self.sbc.gear_light_intensity)
 
     def _apply_blink(self, led_name, period_ms=500, on_ms=250):
+        """Install blink effect payload into macro LED effect engine."""
         self._set_effect(
             led_name,
             {
@@ -40,6 +51,7 @@ class GearEffectController:
         )
 
     def _apply_breathe(self, led_name, period_ms=2000, min_val=0, max_val=15):
+        """Install breathe effect payload into macro LED effect engine."""
         self._set_effect(
             led_name,
             {
@@ -53,6 +65,7 @@ class GearEffectController:
         )
 
     def _set_effect(self, led_name, effect):
+        """Switch active gear effect to a single LED effect definition."""
         if self._active_effect != led_name:
             self._clear_effects()
             self.sbc.update_gear_leds(None, self.sbc.gear_light_intensity)
@@ -60,6 +73,7 @@ class GearEffectController:
             self._active_effect = led_name
 
     def _clear_effects(self):
+        """Clear only gear-owned effects, leaving other LED effects intact."""
         for name in ("GearR", "Gear5"):
             if name in self.macro_engine.led_effects:
                 self.macro_engine.led_effects.pop(name, None)

@@ -1,4 +1,8 @@
+"""Shared UI formatting helpers used by multiple UI backends."""
+
+
 def build_dashboard(state, sbc):
+    """Build normalized dashboard text rows from current parsed controller state."""
     return {
         "title": "STEEL BATTALION CONTROLLER",
         "lines": [
@@ -13,6 +17,7 @@ def build_dashboard(state, sbc):
 
 
 def gear_label(value):
+    """Render controller gear value as user-facing label."""
     if value == -2:
         return "R"
     if value == -1:

@@ -3,8 +3,19 @@ import time
 import json
 from ui_common import build_dashboard
 
+"""
+Curses-based MFD UI.
+
+Provides:
+- status dashboard rendering for parsed controller state
+- boot diagnostics/status view
+- settings panel with simple command console for config updates
+"""
+
 
 class ConsoleMFD:
+    """Terminal UI frontend used when pygame UI is unavailable or not selected."""
+
     def __init__(self, sbc, config_view, config_root, config_path, reload_callback=None):
         self.sbc = sbc
         self.config_view = config_view
@@ -48,6 +59,7 @@ class ConsoleMFD:
             self.color_dim = 0
 
     def teardown(self):
+        """Restore terminal state on exit."""
         try:
             self.screen.keypad(False)
             curses.nocbreak()
@@ -57,12 +69,14 @@ class ConsoleMFD:
             pass
 
     def _safe_add(self, y, x, text, attr=0):
+        """Best-effort safe text draw that avoids curses bounds exceptions."""
         try:
             self.screen.addstr(y, x, text[: max(0, self.width - x - 1)], attr)
         except curses.error:
             pass
 
     def _handle_input(self):
+        """Handle keyboard/mouse input for tab switching and command mode."""
         try:
             key = self.screen.getch()
         except Exception:
@@ -103,6 +117,7 @@ class ConsoleMFD:
                     self.tab = "settings"
 
     def handle_touch(self, x, y):
+        """Map touchscreen taps to tab selection zones."""
         self.last_touch = (x, y)
         if y == 0:
             if 2 <= x <= 10:
@@ -111,11 +126,13 @@ class ConsoleMFD:
                 self.tab = "settings"
 
     def _draw_tabs(self):
+        """Render status/settings tab strip."""
         self._safe_add(0, 2, "[STATUS]", self.color_accent if self.tab == "status" else self.color_dim)
         self._safe_add(0, 12, "[SETTINGS]", self.color_accent if self.tab == "settings" else self.color_dim)
         self._safe_add(1, 2, "-" * min(self.width - 4, 60), self.color_accent)
 
     def set_boot_mode(self, enabled, stage="", message=""):
+        """Switch into/out of boot diagnostics view."""
         self.boot_mode = enabled
         self.boot_stage = stage
         self.boot_message = message
@@ -123,6 +140,7 @@ class ConsoleMFD:
             self.status_message = ""
 
     def update_boot(self, stage=None, message=None):
+        """Update boot stage/status text."""
         if stage is not None:
             self.boot_stage = stage
         if message is not None:
@@ -130,12 +148,15 @@ class ConsoleMFD:
             self.status_message = ""
 
     def set_status(self, message):
+        """Set transient status line shown in dashboard."""
         self.status_message = message
 
     def set_layer(self, layer):
+        """Expose active macro layer in UI."""
         self.layer = layer
 
     def render(self, state):
+        """Render one UI frame for current parsed state."""
         self._handle_input()
         self.height, self.width = self.screen.getmaxyx()
         self.screen.erase()
@@ -170,6 +191,7 @@ class ConsoleMFD:
         self.screen.refresh()
 
     def _render_pressed_panel(self, pressed):
+        """Render right-side list of currently active/held controls."""
         left_width = max(40, int(self.width * 0.62))
         panel_x = left_width + 1
         panel_w = max(20, self.width - panel_x - 2)
@@ -205,6 +227,7 @@ class ConsoleMFD:
 
 
     def _render_boot(self):
+        """Render boot diagnostics overlay used during startup sequence."""
         spinner = ["-", "\\", "|", "/"][self._boot_spinner % 4]
         self._boot_spinner += 1
         self._safe_add(3, 2, "STEEL BATTALION CONTROLLER BIOS", self.color_accent)
@@ -241,6 +264,7 @@ class ConsoleMFD:
         self._safe_add(self.height - 1, 2, "Touch placeholder: Settings tab available", self.color_dim)
 
     def _render_settings(self):
+        """Render settings summary and command-line prompt."""
         self._safe_add(3, 2, "MFD SETTINGS", self.color_accent)
         rows = [
             f"Active Profile: {self.config_view.get('active_profile', 'default')}",
@@ -266,6 +290,7 @@ class ConsoleMFD:
             self._safe_add(self.height - 1, 2, "Press 'd' for status, 's' for settings", self.color_dim)
 
     def _run_command(self, command):
+        """Execute settings commands entered from command mode."""
         parts = command.strip().split()
         if not parts:
             return
@@ -346,17 +371,20 @@ class ConsoleMFD:
             self.command_result = f"Command error: {exc}"
 
     def _active_profile(self):
+        """Return mutable active profile dictionary from config root."""
         profiles = self.config_root.setdefault("profiles", {})
         name = self.config_root.get("active_profile", "default")
         return profiles.setdefault(name, {})
 
     def _refresh_view(self):
+        """Rebuild flattened config view used by settings page."""
         profile = self._active_profile()
         view = dict(self.config_root)
         view.update(profile)
         self.config_view = view
 
     def _save_config(self):
+        """Persist current config root to disk."""
         import json
         from pathlib import Path
 

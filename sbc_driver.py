@@ -5,8 +5,20 @@ import usb.core
 import usb.util
 from collections import deque
 
+"""
+Hardware driver and controller-state adapter for the Steel Battalion Controller.
+
+This module handles:
+- USB IO (read controller packets / write LED packets)
+- raw packet decoding and optional analog calibration processing
+- LED mode behavior (toggle/momentary/flash/latched)
+- startup/diagnostic sequencing and shutdown gesture detection
+"""
+
 
 class SBCDriver:
+    """Low-level controller interface plus runtime state/LED behavior helpers."""
+
     VID = 0x0A7B
     PID = 0xD000
     INTERFACE = 0
@@ -33,6 +45,7 @@ class SBCDriver:
     GEAR_REVERSE_FLASH = True
 
     def __init__(self, ui=None):
+        """Initialize controller metadata, LED state buffers, and runtime caches."""
         self.dev = None
         self.ep_in = None
         self.ep_out = None
@@ -193,6 +206,7 @@ class SBCDriver:
         self.logical_state = {name: False for name in self.button_names}
 
     def open(self):
+        """Locate controller, claim USB interface, and cache endpoint handles."""
         self.dev = usb.core.find(idVendor=self.VID, idProduct=self.PID)
         if self.dev is None:
             raise RuntimeError("Steel Battalion Controller not found.")
@@ -209,6 +223,7 @@ class SBCDriver:
         self.diag_status["usb"] = "OK"
 
     def read_raw(self):
+        """Read one raw HID report from the controller."""
         return self.dev.read(
             self.ep_in.bEndpointAddress,
             self.ep_in.wMaxPacketSize,
@@ -239,6 +254,7 @@ class SBCDriver:
         return (buf[byte_pos] & mask) != 0
 
     def parse_state(self, buf):
+        """Decode packet and update `last_values` cache used by macro expressions."""
         self.prev_control_data = self.raw_control_data
         self.raw_control_data = bytearray(buf)
         raw_state = self.parse_raw_state(buf)
@@ -258,6 +274,7 @@ class SBCDriver:
         return state
 
     def parse_raw_state(self, buf):
+        """Decode HID packet bytes into structured button/analog/gear values."""
         gear_raw = int(buf[25])
         if gear_raw == 255:
             gear_value = -1
@@ -280,6 +297,7 @@ class SBCDriver:
         }
 
     def set_analog_config(self, config):
+        """Install analog post-processing config and smoothing ring buffers."""
         self.analog_config = config
         for name, axis_cfg in config.items():
             samples = int(axis_cfg.get("smoothing_samples", 1))
@@ -288,6 +306,7 @@ class SBCDriver:
             self.analog_samples[name] = deque(maxlen=samples)
 
     def apply_analog_processing(self, state):
+        """Apply trim, clamping, smoothing, and deadzone logic to analog channels."""
         if not self.analog_config:
             return state
 
@@ -336,6 +355,7 @@ class SBCDriver:
         return value
 
     def set_led(self, led_id, intensity, send=True):
+        """Set one LED nibble in output packet and optionally flush to device."""
         if led_id in self.LED_ID_UNUSED or led_id < self.LED_ID_MIN or led_id > self.LED_ID_MAX:
             return
 
@@ -351,6 +371,7 @@ class SBCDriver:
             self.write_leds()
 
     def set_all_leds(self, intensity, send=True):
+        """Set all valid LEDs to the same intensity."""
         for led_id in range(self.LED_ID_MIN, self.LED_ID_MAX + 1):
             if led_id in self.LED_ID_UNUSED:
                 continue
@@ -359,9 +380,11 @@ class SBCDriver:
             self.write_leds()
 
     def write_leds(self):
+        """Write current LED output packet to the controller."""
         self.ep_out.write(self.raw_led_data)
 
     def update_gear_leds(self, gear_value, intensity=8):
+        """Set static gear indicator LEDs for current gear value."""
         dirty = False
         for led_id in range(self.GEAR_LED_MIN, self.GEAR_LED_MAX + 1):
             if self.led_state.get(led_id, 0) != 0:
@@ -389,6 +412,7 @@ class SBCDriver:
             self.write_leds()
 
     def set_gear_lights(self, update, intensity):
+        """Enable/disable automatic gear lights and set intensity."""
         self.update_gear_lights = bool(update)
         self.gear_light_intensity = self._clamp_intensity(intensity)
 
@@ -408,6 +432,7 @@ class SBCDriver:
         return current != previous
 
     def handle_button_leds(self, led_mode):
+        """Apply configured LED behavior modes for control-associated LEDs."""
         if self.raw_control_data is None:
             return
 
@@ -483,6 +508,12 @@ class SBCDriver:
             self.write_leds()
 
     def update_logical_states(self, led_mode):
+        """
+        Update logical control states.
+
+        For toggle/latched LEDs, logical state tracks LED state instead of
+        instantaneous physical button press.
+        """
         if self.raw_control_data is None:
             return
 
@@ -513,6 +544,7 @@ class SBCDriver:
         return bool(self.logical_state.get(name, False))
 
     def get_held_controls(self, pressed):
+        """Return logical-on controls that are not physically pressed this frame."""
         held = []
         for name, value in self.logical_state.items():
             if value and name not in pressed:
@@ -531,6 +563,7 @@ class SBCDriver:
         return mode, peers
 
     def demo_led_sequence(self):
+        """Run startup/demo LED sweep effect."""
         self.set_all_leds(self.MIN_LIGHT_INTENSITY, send=True)
         for led_id in range(self.LOWEST_LIGHT_VAL, self.HIGHEST_LIGHT_VAL):
             if led_id in self.LED_ID_UNUSED:
@@ -548,6 +581,7 @@ class SBCDriver:
         self.set_all_leds(self.MIN_LIGHT_INTENSITY, send=True)
 
     def power_down_sequence(self):
+        """Run shutdown LED effect."""
         for _ in range(3):
             self.set_all_leds(self.MAX_LIGHT_INTENSITY, send=True)
             time.sleep(0.15)
@@ -564,9 +598,11 @@ class SBCDriver:
         self.set_all_leds(self.MIN_LIGHT_INTENSITY, send=True)
 
     def graceful_shutdown(self):
+        """Perform visual shutdown sequence."""
         self.power_down_sequence()
 
     def should_terminate(self):
+        """Detect hold gesture used to end runtime loop."""
         if self.raw_control_data is None:
             self.shutdown_hold_start = None
             return False
@@ -591,12 +627,14 @@ class SBCDriver:
         return False
 
     def _update_flash_state(self):
+        """Advance shared flash phase timer used by flashing LED modes."""
         now = time.monotonic()
         if now - self._last_flash_toggle >= self.FLASH_PERIOD_S:
             self._flash_on = not self._flash_on
             self._last_flash_toggle = now
 
     def _wait_for_button(self, button_name, led_name):
+        """Startup helper: block until required button is pressed."""
         button_index = self.button_name_to_index[button_name]
         led_id = self.led_name_to_id[led_name]
         while True:
@@ -620,6 +658,7 @@ class SBCDriver:
             time.sleep(self.TIME_BETWEEN_POLLS_MS / 1000.0)
 
     def _wait_for_toggles_on(self):
+        """Startup helper: block until all subsystem toggles are ON."""
         toggle_names = [
             "ToggleFilterControl",
             "ToggleOxygenSupply",
@@ -664,6 +703,7 @@ class SBCDriver:
             time.sleep(self.TIME_BETWEEN_POLLS_MS / 1000.0)
 
     def startup_sequence(self):
+        """Run boot diagnostics and required startup interaction flow."""
         if self.ui is not None:
             self.ui.set_boot_mode(True, stage="Boot", message="Initializing systems")
             self.ui.render(self.parse_raw_state(self.read_raw()))
@@ -680,6 +720,7 @@ class SBCDriver:
             self.ui.set_boot_mode(False)
 
     def _run_boot_diagnostics(self):
+        """Execute startup diagnostics and update diagnostic status fields."""
         self._diag_usb()
         self._diag_led_interface()
         self._diag_control_channels()
@@ -690,9 +731,11 @@ class SBCDriver:
             self.ui.render(self.parse_raw_state(self.read_raw()))
 
     def _diag_usb(self):
+        """Set USB diagnostic status."""
         self.diag_status["usb"] = "OK" if self.usb_ok else "FAIL"
 
     def _diag_led_interface(self):
+        """Exercise LED paths as a confidence check."""
         try:
             comm_names = {"Comm1", "Comm2", "Comm3", "Comm4", "Comm5"}
             led_ids = [
@@ -714,6 +757,7 @@ class SBCDriver:
             self.diag_status["led"] = "FAIL"
 
     def _diag_control_channels(self):
+        """Exercise COMM channel LEDs as control-path indicator check."""
         try:
             comm_names = ["Comm1", "Comm2", "Comm3", "Comm4", "Comm5"]
             for name in comm_names:
@@ -734,7 +778,9 @@ class SBCDriver:
             self.diag_status["control"] = "FAIL"
 
     def _diag_calibration(self):
+        """Report whether analog calibration config is available."""
         self.diag_status["calibration"] = "OK" if self.calibration_configured else "NOT SET"
 
     def _diag_input_matrix(self):
+        """Report whether touch input subsystem is configured/enabled."""
         self.diag_status["input"] = "OK" if self.touch_enabled else "NOT SET"

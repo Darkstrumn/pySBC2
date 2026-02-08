@@ -2,8 +2,11 @@ import json
 import time
 from pathlib import Path
 
+"""Interactive analog calibration helpers."""
+
 
 def calibration_start_animation(sbc):
+    """Short LED pulse sequence indicating calibration start."""
     for _ in range(2):
         sbc.set_all_leds(sbc.MAX_LIGHT_INTENSITY, send=True)
         time.sleep(0.15)
@@ -12,6 +15,7 @@ def calibration_start_animation(sbc):
 
 
 def calibration_end_animation(sbc):
+    """Short LED pulse sequence indicating calibration completion."""
     for _ in range(3):
         sbc.set_all_leds(sbc.MAX_LIGHT_INTENSITY, send=True)
         time.sleep(0.1)
@@ -20,6 +24,12 @@ def calibration_end_animation(sbc):
 
 
 def calibrate_axes(sbc, config, config_path):
+    """
+    Capture neutral/rest samples for analog channels and persist deadzone settings.
+
+    Centered axes compute center+deviation deadzone; low-biased axes compute
+    low-end threshold deadzone.
+    """
     active_profile = str(config.get("active_profile", "default"))
     profiles = config.setdefault("profiles", {})
     profile = profiles.setdefault(active_profile, {})
