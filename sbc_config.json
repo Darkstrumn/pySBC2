@@ -77,6 +77,39 @@
         "port": 8765,
         "send_interval_ms": 20
       },
+      "services": {
+        "reader_poll_ms": 4,
+        "writer_poll_ms": 4,
+        "model_poll_ms": 4,
+        "macro_poll_ms": 4,
+        "telemetry_poll_ms": 20,
+        "model_snapshot_ms": 250,
+        "ui_poll_ms": 20,
+        "shutdown_poll_ms": 20
+      },
+      "mqtt": {
+        "enabled": false,
+        "host": "127.0.0.1",
+        "port": 1883,
+        "keepalive": 60,
+        "base_topic": "sbc",
+        "username": "",
+        "password": "",
+        "publish_qos": 0,
+        "retain": false,
+        "command_topics": {
+          "button": "cmd/button",
+          "macro": "cmd/macro",
+          "led": "cmd/led",
+          "event": "cmd/event"
+        }
+      },
+      "audit": {
+        "enabled": true,
+        "path": "runtime_context.log",
+        "max_bytes": 2097152,
+        "include_raw_state": false
+      },
       "macro_output": "log",
       "control_macros": {
         "Eject": { "action": "ELITE_ABORT", "behavior": "from_led" },

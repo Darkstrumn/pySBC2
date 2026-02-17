@@ -1,29 +1,33 @@
 #!/usr/bin/python3
 """
-Runtime entrypoint for SBC controller operation.
+Runtime entrypoint for SBC controller operation (v1.0 service architecture).
 
 High-level flow:
-1. Load config + active profile and initialize hardware/UI/network.
+1. Load config/profile and initialize hardware/UI/network transports.
 2. Run startup sequence, then optional powerup macro.
-3. Main loop reads controller state, updates LEDs/logical states, dispatches:
-   - physical controls -> macro engine
-   - physical edges -> vessel model
-   - queued synthetic events -> macro engine
-4. Publish telemetry, render UI, and handle graceful shutdown condition.
+3. Run polling services for reader/writer/model/macro/telemetry/ui/shutdown.
+4. Shutdown gracefully and keep runtime context audit logs for replay.
 """
 
 import sys
-import time
 
 from calibration import calibrate_axes
-from config_loader import load_config, build_default_led_modes
-from macro_engine import MacroEngine
-from sbc_driver import SBCDriver
-from ui_factory import init_ui
-from touch_input import TouchInput
-from gear_effects import GearEffectController
-from network_server import NetworkEventServer
+from config_loader import build_default_led_modes, load_config
 from input_matrix import InputMatrix
+from macro_engine import MacroEngine
+from mqtt_bridge import MqttBridge
+from network_server import NetworkEventServer
+from sbc_driver import SBCDriver
+from service_runtime import (
+    CommandRouter,
+    EventSinkFanout,
+    LocalEventBus,
+    RuntimeAuditSink,
+    ServiceRuntime,
+    build_services,
+)
+from touch_input import TouchInput
+from ui_factory import init_ui
 from vessel_models import build_vessel_model
 
 
@@ -91,12 +95,27 @@ def main():
     sbc = SBCDriver()
     led_mode = apply_config(sbc, effective)
     sbc.open()
+
     macro_engine = None
     vessel_model = None
     ui = None
+    touch = None
+    event_server = None
+    mqtt_bridge = None
+    event_sink = None
+
+    bus = LocalEventBus()
+    audit_cfg = effective.get("audit", {})
+    audit_sink = RuntimeAuditSink(
+        path=str(audit_cfg.get("path", "runtime_context.log")),
+        enabled=bool(audit_cfg.get("enabled", True)),
+        max_bytes=int(audit_cfg.get("max_bytes", 2097152)),
+        include_raw_state=bool(audit_cfg.get("include_raw_state", False)),
+    )
+    event_sink = EventSinkFanout([audit_sink])
 
     def reload_callback(vars_only=False, clear_vars=False):
-        nonlocal led_mode
+        nonlocal led_mode, config, effective
         if clear_vars:
             if macro_engine is not None:
                 macro_engine.clear_persisted_vars()
@@ -105,28 +124,60 @@ def main():
             if macro_engine is not None:
                 macro_engine.reload_vars()
             return
-        cfg = load_config("sbc_config.json")
-        eff = build_effective_config(cfg)
-        led_mode = apply_config(sbc, eff)
+        config = load_config("sbc_config.json")
+        effective = build_effective_config(config)
+        led_mode = apply_config(sbc, effective)
         if macro_engine is not None:
-            macro_engine.reload_config(eff)
+            macro_engine.reload_config(effective)
         if vessel_model is not None:
-            vessel_model.reload_config(eff)
+            vessel_model.reload_config(effective)
         if ui is not None:
-            ui.config_root = cfg
-            ui.config_view = eff
+            ui.config_root = config
+            ui.config_view = effective
 
-    ui = init_ui(ui_mode, sbc, effective, config, "sbc_config.json", reload_callback=reload_callback)
-    sbc.ui = ui
-    net_config = effective.get("net_server", {})
-    event_server = None
-    if isinstance(net_config, dict) and net_config.get("enabled"):
-        event_server = NetworkEventServer(
-            host=str(net_config.get("host", "0.0.0.0")),
-            port=int(net_config.get("port", 8765)),
+    try:
+        ui = init_ui(ui_mode, sbc, effective, config, "sbc_config.json", reload_callback=reload_callback)
+        sbc.ui = ui
+
+        net_config = effective.get("net_server", {})
+        if isinstance(net_config, dict) and net_config.get("enabled"):
+            event_server = NetworkEventServer(
+                host=str(net_config.get("host", "0.0.0.0")),
+                port=int(net_config.get("port", 8765)),
+            )
+            event_server.start()
+            event_sink.add(event_server)
+
+        mqtt_bridge = MqttBridge(effective.get("mqtt", {}), bus=bus, audit_sink=audit_sink)
+        if mqtt_bridge.enabled:
+            mqtt_bridge.start()
+            event_sink.add(mqtt_bridge)
+
+        input_matrix = InputMatrix(
+            event_sink=event_sink,
+            max_events=int(effective.get("input_queue_size", 256)),
         )
-        event_server.start()
-        event_server.publish(
+        macro_engine = MacroEngine(effective, sbc, ui=ui, event_sink=event_sink, input_matrix=input_matrix)
+        vessel_model = build_vessel_model(effective, input_matrix=input_matrix, event_sink=event_sink)
+        CommandRouter(bus, input_matrix, event_sink=event_sink)
+
+        if effective.get("touch_device"):
+            touch = TouchInput(
+                effective.get("touch_device"),
+                int(effective.get("touch_width", 800)),
+                int(effective.get("touch_height", 480)),
+            )
+        sbc.touch_enabled = bool(touch and touch.enabled)
+
+        errors = macro_engine.validate_macros()
+        if errors:
+            message = f"Macro errors: {errors[0]}"
+            if ui is not None:
+                ui.set_status(message)
+            else:
+                print(message)
+
+        event_sink.publish(
             {
                 "type": "meta",
                 "button_names": sbc.button_names,
@@ -141,134 +192,52 @@ def main():
                     "right_pedal",
                 ],
                 "tuner_name": "tuner",
-                    "gear_name": "gear",
-                }
-            )
-    input_matrix = InputMatrix(
-        event_sink=event_server,
-        max_events=int(effective.get("input_queue_size", 256)),
-    )
-    macro_engine = MacroEngine(effective, sbc, ui=ui, event_sink=event_server, input_matrix=input_matrix)
-    vessel_model = build_vessel_model(effective, input_matrix=input_matrix, event_sink=event_server)
-    gear_effects = GearEffectController(sbc, macro_engine, effective)
-    touch = None
-    if effective.get("touch_device"):
-        touch = TouchInput(
-            effective.get("touch_device"),
-            int(effective.get("touch_width", 800)),
-            int(effective.get("touch_height", 480)),
+                "gear_name": "gear",
+                "runtime_mode": "services_v1",
+            }
         )
-    sbc.touch_enabled = bool(touch and touch.enabled)
-    errors = macro_engine.validate_macros()
-    if errors:
-        message = f"Macro errors: {errors[0]}"
+
+        if mode == "led":
+            sbc.demo_led_sequence()
+            return
+
+        if mode == "calibrate":
+            calibrate_axes(sbc, config, "sbc_config.json")
+            return
+
+        if mode == "read":
+            sbc.startup_sequence()
+            vessel_model.on_boot_complete()
+            macro_engine.run_macro(effective.get("powerup_macro", ""))
+
+            runtime = ServiceRuntime([], audit_sink=audit_sink)
+            runtime.services = build_services(
+                sbc=sbc,
+                macro_engine=macro_engine,
+                vessel_model=vessel_model,
+                input_matrix=input_matrix,
+                effective=effective,
+                led_mode=led_mode,
+                ui=ui,
+                touch=touch,
+                event_sink=event_sink,
+                bus=bus,
+                runtime=runtime,
+            )
+            audit_sink.log("runtime_started", {"mode": "read", "runtime": "services_v1"}, service="runtime")
+            runtime.run()
+            audit_sink.log("runtime_stopped", {"reason": "shutdown_request"}, service="runtime")
+            sbc.graceful_shutdown()
+            return
+    finally:
         if ui is not None:
-            ui.set_status(message)
-        else:
-            print(message)
-
-    if mode == "led":
-        sbc.demo_led_sequence()
+            ui.teardown()
+        if touch is not None:
+            touch.close()
         if event_server is not None:
             event_server.stop()
-        return
-
-    if mode == "calibrate":
-        calibrate_axes(sbc, config, "sbc_config.json")
-        if event_server is not None:
-            event_server.stop()
-        return
-
-    if mode == "read":
-        sbc.startup_sequence()
-        vessel_model.on_boot_complete()
-        macro_engine.run_macro(effective.get("powerup_macro", ""))
-        send_interval = 0.0
-        last_send = 0.0
-        if isinstance(net_config, dict) and event_server is not None:
-            send_interval = max(0.0, float(net_config.get("send_interval_ms", 0)) / 1000.0)
-        while True:
-            # Acquire and normalize controller state for this frame.
-            buf = sbc.read_raw()
-            state = sbc.parse_state(buf)
-            sbc.handle_button_leds(led_mode)
-            sbc.update_logical_states(led_mode)
-
-            # Feed semantic vessel model with physical control edge events.
-            for control_name, index in sbc.button_name_to_index.items():
-                if sbc.button_changed(index):
-                    vessel_model.on_control_change(
-                        control_name,
-                        sbc.get_button_state(index),
-                        logical_state=sbc.get_logical_state(control_name),
-                    )
-            vessel_model.tick()
-
-            # Standard macro dispatch from physical controls and analog/gear zones.
-            macro_engine.handle_layer_cycle()
-            macro_engine.handle_buttons(state, led_mode)
-            macro_engine.handle_analogs(state)
-            macro_engine.handle_gears(state)
-
-            # Drain queued synthetic events so automation behaves like user input.
-            for queued in input_matrix.drain():
-                event_type = queued.get("type")
-                if event_type == "button":
-                    macro_engine.handle_button_event(
-                        queued.get("control"),
-                        bool(queued.get("pressed")),
-                        changed=True,
-                        default_led_mode=led_mode,
-                    )
-                elif event_type == "macro":
-                    macro_engine.run_macro(queued.get("macro"))
-
-            # Publish periodic raw-state telemetry if network server is active.
-            if event_server is not None and send_interval >= 0:
-                now = time.monotonic()
-                if send_interval == 0 or now - last_send >= send_interval:
-                    event_server.publish(
-                        {
-                            "type": "raw_state",
-                            "buttons": [1 if pressed else 0 for pressed in state["buttons"]],
-                            "analogs": {
-                                "aim_x": state["aim_x"],
-                                "aim_y": state["aim_y"],
-                                "rotation": state["rotation"],
-                                "sight_x": state["sight_x"],
-                                "sight_y": state["sight_y"],
-                                "left_pedal": state["left_pedal"],
-                                "middle_pedal": state["middle_pedal"],
-                                "right_pedal": state["right_pedal"],
-                            },
-                            "tuner": state["tuner"],
-                            "gear": state["gear"],
-                        }
-                    )
-                    last_send = now
-
-            # UI updates, gear effects, and shutdown handling.
-            if ui is not None:
-                ui.set_layer(macro_engine.layer)
-                if touch is not None:
-                    point = touch.poll()
-                    if point:
-                        ui.handle_touch(*point)
-            if sbc.update_gear_lights:
-                gear_effects.update(state["gear"])
-            macro_engine.tick()
-            if ui is not None:
-                ui.render(state)
-            if sbc.should_terminate():
-                sbc.graceful_shutdown()
-                if ui is not None:
-                    ui.teardown()
-                if touch is not None:
-                    touch.close()
-                if event_server is not None:
-                    event_server.stop()
-                return
-            time.sleep(sbc.TIME_BETWEEN_POLLS_MS / 1000.0)
+        if mqtt_bridge is not None:
+            mqtt_bridge.stop()
 
 
 if __name__ == "__main__":

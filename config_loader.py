@@ -4,6 +4,19 @@ from pathlib import Path
 """Config loading/merging helpers for runtime and profile selection."""
 
 
+def _merge_defaults(data, defaults):
+    """Recursively merge missing defaults into loaded config tree."""
+    if not isinstance(data, dict) or not isinstance(defaults, dict):
+        return data
+    for key, value in defaults.items():
+        if key not in data:
+            data[key] = value
+            continue
+        if isinstance(value, dict) and isinstance(data.get(key), dict):
+            _merge_defaults(data[key], value)
+    return data
+
+
 def load_config(path):
     """
     Load config JSON and apply root-level defaults.
@@ -43,6 +56,39 @@ def load_config(path):
             "port": 8765,
             "send_interval_ms": 20,
         },
+        "services": {
+            "reader_poll_ms": 4,
+            "writer_poll_ms": 4,
+            "model_poll_ms": 4,
+            "macro_poll_ms": 4,
+            "telemetry_poll_ms": 20,
+            "model_snapshot_ms": 250,
+            "ui_poll_ms": 20,
+            "shutdown_poll_ms": 20,
+        },
+        "mqtt": {
+            "enabled": False,
+            "host": "127.0.0.1",
+            "port": 1883,
+            "keepalive": 60,
+            "base_topic": "sbc",
+            "username": "",
+            "password": "",
+            "publish_qos": 0,
+            "retain": False,
+            "command_topics": {
+                "button": "cmd/button",
+                "macro": "cmd/macro",
+                "led": "cmd/led",
+                "event": "cmd/event",
+            },
+        },
+        "audit": {
+            "enabled": True,
+            "path": "runtime_context.log",
+            "max_bytes": 2097152,
+            "include_raw_state": False,
+        },
         "vessel_model": {
             "type": "mech",
             "auto_queue_start": False,
@@ -74,15 +120,7 @@ def load_config(path):
         data = json.loads(cfg_path.read_text())
     except (OSError, json.JSONDecodeError):
         return defaults
-    for key, value in defaults.items():
-        if key not in data:
-            data[key] = value
-            continue
-        if isinstance(value, dict) and isinstance(data[key], dict):
-            for nested_key, nested_value in value.items():
-                if nested_key not in data[key]:
-                    data[key][nested_key] = nested_value
-    return data
+    return _merge_defaults(data, defaults)
 
 
 def build_default_led_modes(led_name_to_id):
