@@ -2,6 +2,10 @@
 
 Python runtime for the Steel Battalion Controller, designed for Raspberry Pi as the on-device controller core.
 
+Prerequisite for MQTT/process services:
+
+- `pip install paho-mqtt`
+
 ### Architecture
 
 The `read` runtime path is now decomposed into polling services:
@@ -52,3 +56,31 @@ Runtime context is append-logged for replay/resume:
 - `python sbc-driver-test1.py read` (default): service runtime
 - `python sbc-driver-test1.py led`: LED demo sequence
 - `python sbc-driver-test1.py calibrate`: analog calibration helper
+
+### Process-Isolated Services (MQTT-only)
+
+For true process isolation, run each executable separately:
+
+- `python services/sbc_io_service.py`
+- `python services/sbc_reader_service.py`
+- `python services/sbc_writer_service.py`
+- `python services/sbc_macro_service.py`
+- `python services/sbc_model_service.py`
+
+Process topic pipeline:
+
+- `sbc/io/raw_state` from `sbc_io_service.py`
+- `sbc/events/raw_state` and `sbc/events/button` from `sbc_reader_service.py`
+- `sbc/cmd/led` and `sbc/cmd/led_frame` consumed by `sbc_writer_service.py`
+- `sbc/io/led_frame` produced by `sbc_writer_service.py` and consumed by `sbc_io_service.py`
+- `sbc/cmd/macro` and `sbc/cmd/button` consumed by `sbc_macro_service.py`
+- `sbc/events/vessel_snapshot` from `sbc_model_service.py`
+
+All process services coordinate only through MQTT; no shared in-memory runtime is required.
+
+### Node-RED Import Flows
+
+Import files in the Node-RED editor (`Menu -> Import`):
+
+- `node_red/flows_sbc_commands.json`
+- `node_red/flows_sbc_event_bridge.json`

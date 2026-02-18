@@ -1,0 +1,208 @@
+[
+  {
+    "id": "tab_sbc_events",
+    "type": "tab",
+    "label": "SBC Event Bridge",
+    "disabled": false,
+    "info": "Example bridge: button events -> LED command, plus event monitoring"
+  },
+  {
+    "id": "mqtt_in_button_events",
+    "type": "mqtt in",
+    "z": "tab_sbc_events",
+    "name": "sbc/events/button",
+    "topic": "sbc/events/button",
+    "qos": "0",
+    "datatype": "auto-detect",
+    "broker": "mqtt_broker_local",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 130,
+    "y": 80,
+    "wires": [
+      [
+        "fn_button_to_led",
+        "debug_button_events"
+      ]
+    ]
+  },
+  {
+    "id": "fn_button_to_led",
+    "type": "function",
+    "z": "tab_sbc_events",
+    "name": "Start->LED Momentary",
+    "func": "const ev = msg.payload || {};\nif (ev.control !== \"Start\") {\n    return null;\n}\nmsg.topic = \"sbc/cmd/led\";\nmsg.payload = {\n    led: \"Start\",\n    mode: ev.pressed ? \"steady\" : \"off\",\n    intensity: 15\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 360,
+    "y": 80,
+    "wires": [
+      [
+        "mqtt_out_cmd_led",
+        "debug_led_cmd"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_out_cmd_led",
+    "type": "mqtt out",
+    "z": "tab_sbc_events",
+    "name": "sbc/cmd/led",
+    "topic": "sbc/cmd/led",
+    "qos": "",
+    "retain": "",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "mqtt_broker_local",
+    "x": 600,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "mqtt_in_all_events",
+    "type": "mqtt in",
+    "z": "tab_sbc_events",
+    "name": "sbc/events/#",
+    "topic": "sbc/events/#",
+    "qos": "0",
+    "datatype": "auto-detect",
+    "broker": "mqtt_broker_local",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 110,
+    "y": 180,
+    "wires": [
+      [
+        "debug_all_events"
+      ]
+    ]
+  },
+  {
+    "id": "inject_macro_from_nodered",
+    "type": "inject",
+    "z": "tab_sbc_events",
+    "name": "Trigger powerup macro",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"macro\":\"powerup\"}",
+    "payloadType": "json",
+    "x": 140,
+    "y": 260,
+    "wires": [
+      [
+        "mqtt_out_cmd_macro"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_out_cmd_macro",
+    "type": "mqtt out",
+    "z": "tab_sbc_events",
+    "name": "sbc/cmd/macro",
+    "topic": "sbc/cmd/macro",
+    "qos": "",
+    "retain": "",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "mqtt_broker_local",
+    "x": 390,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "debug_button_events",
+    "type": "debug",
+    "z": "tab_sbc_events",
+    "name": "Button Events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 350,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "debug_led_cmd",
+    "type": "debug",
+    "z": "tab_sbc_events",
+    "name": "LED Cmd Out",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 600,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "debug_all_events",
+    "type": "debug",
+    "z": "tab_sbc_events",
+    "name": "All SBC Events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 350,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "mqtt_broker_local",
+    "type": "mqtt-broker",
+    "name": "Local MQTT",
+    "broker": "127.0.0.1",
+    "port": "1883",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": "",
+    "closeTopic": "",
+    "closeQos": "0",
+    "closePayload": "",
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": "",
+    "sessionExpiry": ""
+  }
+]

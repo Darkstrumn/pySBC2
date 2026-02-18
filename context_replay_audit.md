@@ -44,3 +44,35 @@ Date: 2026-02-17
 - Adjust polling in `sbc_config.json` under `services`.
 - Configure Node-RED broker settings under `mqtt`.
 - Audit path and size controls are under `audit`.
+
+## Session: Process-Isolated Services + Node-RED Flows
+
+Date: 2026-02-17
+
+### Intent
+- Move from cooperative in-process services to true process-isolated executables.
+- Keep all runtime coordination on MQTT topics only.
+- Provide importable Node-RED flow files for button/macro/led command paths.
+
+### Implemented Direction
+- Added shared process runtime helpers in `process_services_common.py`.
+- Added isolated service executables:
+  - `services/sbc_io_service.py`
+  - `services/sbc_reader_service.py`
+  - `services/sbc_writer_service.py`
+  - `services/sbc_macro_service.py`
+  - `services/sbc_model_service.py`
+- Added Node-RED import files:
+  - `node_red/flows_sbc_commands.json`
+  - `node_red/flows_sbc_event_bridge.json`
+- Extended MQTT defaults for process topic routing:
+  - `io_raw_topic`, `io_led_frame_topic`
+  - `event_raw_topic`, `event_button_topic`, `event_vessel_topic`
+  - `command_topics.led_frame`
+
+### Operational Outcome
+- Only `sbc_io_service.py` touches USB hardware.
+- Reader, writer, macro, and model services are separate executables and exchange state/commands over MQTT.
+- Writer owns animation behavior and emits LED frames to IO service.
+- Macro/model automation can publish button/macro/event commands without direct process coupling.
+- Node-RED can now import ready-made flow JSON files to publish/observe required command/event topics.

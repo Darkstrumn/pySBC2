@@ -76,11 +76,17 @@ def load_config(path):
             "password": "",
             "publish_qos": 0,
             "retain": False,
+            "io_raw_topic": "io/raw_state",
+            "io_led_frame_topic": "io/led_frame",
+            "event_raw_topic": "events/raw_state",
+            "event_button_topic": "events/button",
+            "event_vessel_topic": "events/vessel_snapshot",
             "command_topics": {
                 "button": "cmd/button",
                 "macro": "cmd/macro",
                 "led": "cmd/led",
                 "event": "cmd/event",
+                "led_frame": "cmd/led_frame",
             },
         },
         "audit": {

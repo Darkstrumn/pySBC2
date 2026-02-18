@@ -1,0 +1,211 @@
+[
+  {
+    "id": "tab_sbc_commands",
+    "type": "tab",
+    "label": "SBC Commands",
+    "disabled": false,
+    "info": "Manual command injectors for sbc/cmd/button, sbc/cmd/macro, sbc/cmd/led"
+  },
+  {
+    "id": "inject_button_down",
+    "type": "inject",
+    "z": "tab_sbc_commands",
+    "name": "Start Down",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"control\":\"Start\",\"pressed\":true}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 80,
+    "wires": [
+      [
+        "mqtt_out_cmd_button"
+      ]
+    ]
+  },
+  {
+    "id": "inject_button_up",
+    "type": "inject",
+    "z": "tab_sbc_commands",
+    "name": "Start Up",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"control\":\"Start\",\"pressed\":false}",
+    "payloadType": "json",
+    "x": 120,
+    "y": 120,
+    "wires": [
+      [
+        "mqtt_out_cmd_button"
+      ]
+    ]
+  },
+  {
+    "id": "inject_macro_powerup",
+    "type": "inject",
+    "z": "tab_sbc_commands",
+    "name": "Run powerup Macro",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"macro\":\"powerup\"}",
+    "payloadType": "json",
+    "x": 150,
+    "y": 200,
+    "wires": [
+      [
+        "mqtt_out_cmd_macro"
+      ]
+    ]
+  },
+  {
+    "id": "inject_led_blink",
+    "type": "inject",
+    "z": "tab_sbc_commands",
+    "name": "Blink Start LED",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"led\":\"Start\",\"mode\":\"blink\",\"period_ms\":500,\"on_ms\":250,\"intensity\":15}",
+    "payloadType": "json",
+    "x": 140,
+    "y": 280,
+    "wires": [
+      [
+        "mqtt_out_cmd_led"
+      ]
+    ]
+  },
+  {
+    "id": "inject_led_off",
+    "type": "inject",
+    "z": "tab_sbc_commands",
+    "name": "Start LED Off",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"led\":\"Start\",\"mode\":\"off\"}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 320,
+    "wires": [
+      [
+        "mqtt_out_cmd_led"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_out_cmd_button",
+    "type": "mqtt out",
+    "z": "tab_sbc_commands",
+    "name": "sbc/cmd/button",
+    "topic": "sbc/cmd/button",
+    "qos": "",
+    "retain": "",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "mqtt_broker_local",
+    "x": 390,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "mqtt_out_cmd_macro",
+    "type": "mqtt out",
+    "z": "tab_sbc_commands",
+    "name": "sbc/cmd/macro",
+    "topic": "sbc/cmd/macro",
+    "qos": "",
+    "retain": "",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "mqtt_broker_local",
+    "x": 390,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "mqtt_out_cmd_led",
+    "type": "mqtt out",
+    "z": "tab_sbc_commands",
+    "name": "sbc/cmd/led",
+    "topic": "sbc/cmd/led",
+    "qos": "",
+    "retain": "",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "mqtt_broker_local",
+    "x": 380,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "mqtt_broker_local",
+    "type": "mqtt-broker",
+    "name": "Local MQTT",
+    "broker": "127.0.0.1",
+    "port": "1883",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": "",
+    "closeTopic": "",
+    "closeQos": "0",
+    "closePayload": "",
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": "",
+    "sessionExpiry": ""
+  }
+]
