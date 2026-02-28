@@ -1,86 +1,107 @@
-## SBC Controller Runtime (v1.0)
+## SBC Controller Runtime
 
-Python runtime for the Steel Battalion Controller, designed for Raspberry Pi as the on-device controller core.
+Steel Battalion Controller runtime for Raspberry Pi "controller core" operation, with MQTT-based process services, macro automation, vessel modeling, and an AI copilot service.
 
-Prerequisite for MQTT/process services:
+Full technical guide:
+- `docs/SYSTEM_GUIDE.md`
 
-- `pip install paho-mqtt`
+## What Is Included
 
-### Architecture
+- Macro system (`macro_engine.py`): control mappings, layered macros, scripted steps, variables, LED/audio/TTS actions.
+- Process-isolated runtime services (`services/*.py`) with MQTT-only coordination.
+- AI copilot service (`services/sbc_ai_copilot_service.py`) with heuristic mode and optional TensorFlow/TFLite inference.
+- Node-RED import flows (`node_red/*.json`) for command, event, and AI orchestration.
 
-The `read` runtime path is now decomposed into polling services:
+## Fresh Install (Raspberry Pi)
 
-- `ReaderService`: polls controller USB state.
-- `WriterService`: owns LED output, gear effects, and LED animations (`off`, `steady`, `blink`, `breathe`, `pattern`).
-- `ModelService`: applies vessel/application semantic modeling.
-- `MacroDispatchService`: executes button/analog/gear macros and queued synthetic events.
-- `TelemetryService`: publishes sampled raw state.
-- `UIService`: updates console/pygame UI and touch input.
-- `ShutdownService`: enforces the shutdown gesture.
+Use the installer script from project root:
 
-### Event and Transport
+```bash
+chmod +x scripts/install_rpi.sh
+./scripts/install_rpi.sh --with-node-red --with-tflite
+```
 
-- In-process event routing uses a local bus and input matrix.
-- Outbound events can fan out to:
-  - TCP NDJSON server (`net_server`)
-  - MQTT bridge (`mqtt`) for Node-RED
-  - runtime audit log sink (`audit`)
+Installer script:
+- `scripts/install_rpi.sh`
 
-### Node-RED / MQTT Contract
+Options:
+- `--with-node-red`
+- `--with-tensorflow`
+- `--with-tflite`
+- `--no-audio`
 
-Base topic default: `sbc`
+## Required Software
 
-Inbound command topics:
-- `sbc/cmd/button` payload: `{ "control": "Start", "pressed": true }`
-- `sbc/cmd/macro` payload: `{ "macro": "powerup" }`
-- `sbc/cmd/led` payload example:
-  - `{ "led": "Start", "mode": "steady", "intensity": 15 }`
-  - `{ "led": "Start", "mode": "blink", "period_ms": 400, "on_ms": 200 }`
-  - `{ "led": "Start", "mode": "breathe", "period_ms": 1800, "min": 0, "max": 15 }`
-  - `{ "led": "Start", "mode": "pattern", "steps": [{ "intensity": 15, "duration_ms": 120 }, { "intensity": 0, "duration_ms": 120 }], "repeat": true }`
-  - `{ "led": "Start", "mode": "clear" }`
-- `sbc/cmd/event` payload: `{ "name": "custom_event", "payload": {...} }`
+Core:
+- Python 3 with venv support
+- MQTT broker (Mosquitto recommended)
+- Python modules:
+  - `pyusb`
+  - `paho-mqtt`
+  - `evdev`
 
-Outbound event topics:
-- `sbc/events/<event_type>` where `event_type` is from runtime payloads (`raw_state`, `macro_key`, `vessel_snapshot`, etc).
+Optional:
+- Node-RED (for orchestration/dashboard/automation)
+- `pygame` and `pyttsx3` (macro audio/TTS features)
+- `tensorflow` or `tflite-runtime` + `numpy` (AI model inference)
 
-### Runtime Context Audit
+## Runtime Modes
 
-Runtime context is append-logged for replay/resume:
-- config key: `audit.path` (default `runtime_context.log`)
-- log format: NDJSON (one JSON object per line)
-- configurable cap: `audit.max_bytes`
+Legacy single-process runtime:
+- `python sbc-driver-test1.py read`
+- `python sbc-driver-test1.py led`
+- `python sbc-driver-test1.py calibrate`
 
-### Modes
-
-- `python sbc-driver-test1.py read` (default): service runtime
-- `python sbc-driver-test1.py led`: LED demo sequence
-- `python sbc-driver-test1.py calibrate`: analog calibration helper
-
-### Process-Isolated Services (MQTT-only)
-
-For true process isolation, run each executable separately:
-
+Recommended process-isolated runtime:
 - `python services/sbc_io_service.py`
 - `python services/sbc_reader_service.py`
 - `python services/sbc_writer_service.py`
 - `python services/sbc_macro_service.py`
 - `python services/sbc_model_service.py`
+- `python services/sbc_ai_copilot_service.py`
 
-Process topic pipeline:
+Windows helper launcher:
+- `powershell -ExecutionPolicy Bypass -File services/start_process_services.ps1`
 
-- `sbc/io/raw_state` from `sbc_io_service.py`
-- `sbc/events/raw_state` and `sbc/events/button` from `sbc_reader_service.py`
-- `sbc/cmd/led` and `sbc/cmd/led_frame` consumed by `sbc_writer_service.py`
-- `sbc/io/led_frame` produced by `sbc_writer_service.py` and consumed by `sbc_io_service.py`
-- `sbc/cmd/macro` and `sbc/cmd/button` consumed by `sbc_macro_service.py`
-- `sbc/events/vessel_snapshot` from `sbc_model_service.py`
+## Node-RED Flows
 
-All process services coordinate only through MQTT; no shared in-memory runtime is required.
-
-### Node-RED Import Flows
-
-Import files in the Node-RED editor (`Menu -> Import`):
-
+Import these files in Node-RED:
 - `node_red/flows_sbc_commands.json`
 - `node_red/flows_sbc_event_bridge.json`
+- `node_red/flows_sbc_ai_copilot.json`
+
+## Key MQTT Topics (default base `sbc`)
+
+Commands:
+- `sbc/cmd/button`
+- `sbc/cmd/macro`
+- `sbc/cmd/led`
+- `sbc/cmd/event`
+- `sbc/cmd/ai_mode`
+
+Events:
+- `sbc/events/raw_state`
+- `sbc/events/button`
+- `sbc/events/vessel_snapshot`
+- `sbc/events/ai_intent`
+- `sbc/events/ai_diagnostic`
+
+IO bridge:
+- `sbc/io/raw_state`
+- `sbc/io/led_frame`
+
+## Configuration
+
+Primary config:
+- `sbc_config.json`
+
+Important sections:
+- `services`
+- `mqtt`
+- `ai_copilot`
+- `vessel_model`
+- `control_macros`, `macros`, `analog_zones`, `gear_zones`
+- `audit`
+
+For full behavior details and examples:
+- `docs/SYSTEM_GUIDE.md`

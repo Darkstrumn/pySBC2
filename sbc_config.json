@@ -82,6 +82,7 @@
         "writer_poll_ms": 4,
         "model_poll_ms": 4,
         "macro_poll_ms": 4,
+        "ai_poll_ms": 50,
         "telemetry_poll_ms": 20,
         "model_snapshot_ms": 250,
         "ui_poll_ms": 20,
@@ -102,12 +103,39 @@
         "event_raw_topic": "events/raw_state",
         "event_button_topic": "events/button",
         "event_vessel_topic": "events/vessel_snapshot",
+        "event_ai_intent_topic": "events/ai_intent",
+        "event_ai_diagnostic_topic": "events/ai_diagnostic",
         "command_topics": {
           "button": "cmd/button",
           "macro": "cmd/macro",
           "led": "cmd/led",
           "event": "cmd/event",
-          "led_frame": "cmd/led_frame"
+          "led_frame": "cmd/led_frame",
+          "ai_mode": "cmd/ai_mode"
+        }
+      },
+      "ai_copilot": {
+        "enabled": true,
+        "mode": "advisory",
+        "emit_interval_ms": 200,
+        "command_cooldown_ms": 700,
+        "confidence_threshold": 0.65,
+        "auto_macro_threshold": 0.8,
+        "diagnostic_threshold": 0.75,
+        "window_size": 12,
+        "model_type": "heuristic",
+        "model_path": "models/copilot_model.keras",
+        "labels": [],
+        "intent_macro_map": {
+          "supercruise_transition": "ELITE_HYPERSPACE",
+          "hard_brake": "ELITE_THROTTLE_0",
+          "target_lock": "ELITE_TARGET_AHEAD"
+        },
+        "intent_led_map": {
+          "supercruise_transition": "Start",
+          "hard_brake": "Eject",
+          "target_lock": "MainWeaponControl",
+          "evasive_maneuver": "Comm3"
         }
       },
       "audit": {

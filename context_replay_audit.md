@@ -76,3 +76,50 @@ Date: 2026-02-17
 - Writer owns animation behavior and emits LED frames to IO service.
 - Macro/model automation can publish button/macro/event commands without direct process coupling.
 - Node-RED can now import ready-made flow JSON files to publish/observe required command/event topics.
+
+## Session: AI Copilot Service Scaffold
+
+Date: 2026-02-17
+
+### Intent
+- Add a Heavy Gear-inspired "copilot in a box" service using TensorFlow-ready hooks.
+- Keep all coordination MQTT-only and process-isolated.
+- Provide Node-RED flow for AI mode control and guarded command routing.
+
+### Implemented Direction
+- Added `services/sbc_ai_copilot_service.py` with:
+  - `advisory`, `assist`, `auto` runtime modes
+  - heuristic intent/diagnostic fallback
+  - optional TensorFlow/TFLite model inference path
+  - confidence and cooldown-gated command publication
+- Added MQTT topic defaults:
+  - command: `cmd/ai_mode`
+  - events: `events/ai_intent`, `events/ai_diagnostic`
+- Added config section:
+  - `ai_copilot` for thresholds, model settings, intent maps, and cue maps.
+- Added Node-RED import flow:
+  - `node_red/flows_sbc_ai_copilot.json`
+- Updated service launch scripts/docs to include AI copilot process.
+
+## Session: System Documentation + RPi Installer
+
+Date: 2026-02-17
+
+### Intent
+- Add full documentation for macro system, AI copilot, and overall system operation.
+- Summarize operating/install steps in main README.
+- Provide fresh-install bootstrap script for Raspberry Pi controller core deployments.
+
+### Implemented Direction
+- Added full guide document:
+  - `docs/SYSTEM_GUIDE.md`
+- Reworked `README.md` into concise operator summary with:
+  - required software/modules
+  - runtime modes
+  - Node-RED flow import references
+  - key MQTT topics
+  - pointer to full guide
+- Added install bootstrap script:
+  - `scripts/install_rpi.sh`
+  - installs system deps, venv, Python modules, optional Node-RED, optional TensorFlow/TFLite
+- Marked installer script executable in git index.

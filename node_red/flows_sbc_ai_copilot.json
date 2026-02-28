@@ -1,0 +1,315 @@
+[
+  {
+    "id": "tab_sbc_ai_copilot",
+    "type": "tab",
+    "label": "SBC AI Copilot",
+    "disabled": false,
+    "info": "AI copilot mode control, intent monitoring, and gated macro/LED routing"
+  },
+  {
+    "id": "inject_mode_advisory",
+    "type": "inject",
+    "z": "tab_sbc_ai_copilot",
+    "name": "Mode Advisory",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"mode\":\"advisory\"}",
+    "payloadType": "json",
+    "x": 130,
+    "y": 80,
+    "wires": [
+      [
+        "mqtt_out_ai_mode"
+      ]
+    ]
+  },
+  {
+    "id": "inject_mode_assist",
+    "type": "inject",
+    "z": "tab_sbc_ai_copilot",
+    "name": "Mode Assist",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"mode\":\"assist\"}",
+    "payloadType": "json",
+    "x": 120,
+    "y": 120,
+    "wires": [
+      [
+        "mqtt_out_ai_mode"
+      ]
+    ]
+  },
+  {
+    "id": "inject_mode_auto",
+    "type": "inject",
+    "z": "tab_sbc_ai_copilot",
+    "name": "Mode Auto",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"mode\":\"auto\"}",
+    "payloadType": "json",
+    "x": 115,
+    "y": 160,
+    "wires": [
+      [
+        "mqtt_out_ai_mode"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_out_ai_mode",
+    "type": "mqtt out",
+    "z": "tab_sbc_ai_copilot",
+    "name": "sbc/cmd/ai_mode",
+    "topic": "sbc/cmd/ai_mode",
+    "qos": "",
+    "retain": "",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "mqtt_broker_local",
+    "x": 390,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "mqtt_in_ai_intent",
+    "type": "mqtt in",
+    "z": "tab_sbc_ai_copilot",
+    "name": "sbc/events/ai_intent",
+    "topic": "sbc/events/ai_intent",
+    "qos": "0",
+    "datatype": "auto-detect",
+    "broker": "mqtt_broker_local",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 150,
+    "y": 260,
+    "wires": [
+      [
+        "debug_ai_intent",
+        "fn_intent_gate_macro"
+      ]
+    ]
+  },
+  {
+    "id": "fn_intent_gate_macro",
+    "type": "function",
+    "z": "tab_sbc_ai_copilot",
+    "name": "Gate Intent->Macro",
+    "func": "const p = msg.payload || {};\nconst confidence = Number(p.confidence || 0);\nif (!p.recommended_macro) {\n  return null;\n}\nif (confidence < 0.90) {\n  return null;\n}\nmsg.topic = \"sbc/cmd/macro\";\nmsg.payload = {\n  macro: p.recommended_macro,\n  source: \"nodered_ai_gate\",\n  intent: p.intent,\n  confidence\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 380,
+    "y": 260,
+    "wires": [
+      [
+        "mqtt_out_cmd_macro_from_ai",
+        "debug_ai_macro_gate"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_out_cmd_macro_from_ai",
+    "type": "mqtt out",
+    "z": "tab_sbc_ai_copilot",
+    "name": "sbc/cmd/macro",
+    "topic": "sbc/cmd/macro",
+    "qos": "",
+    "retain": "",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "mqtt_broker_local",
+    "x": 610,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "mqtt_in_ai_diag",
+    "type": "mqtt in",
+    "z": "tab_sbc_ai_copilot",
+    "name": "sbc/events/ai_diagnostic",
+    "topic": "sbc/events/ai_diagnostic",
+    "qos": "0",
+    "datatype": "auto-detect",
+    "broker": "mqtt_broker_local",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 160,
+    "y": 340,
+    "wires": [
+      [
+        "debug_ai_diag",
+        "fn_diag_to_led"
+      ]
+    ]
+  },
+  {
+    "id": "fn_diag_to_led",
+    "type": "function",
+    "z": "tab_sbc_ai_copilot",
+    "name": "Diagnostic->LED",
+    "func": "const p = msg.payload || {};\nif (p.severity !== \"critical\" && p.severity !== \"warning\") {\n  return null;\n}\nmsg.topic = \"sbc/cmd/led\";\nmsg.payload = {\n  led: p.severity === \"critical\" ? \"Eject\" : \"Start\",\n  mode: \"blink\",\n  period_ms: p.severity === \"critical\" ? 220 : 500,\n  on_ms: p.severity === \"critical\" ? 120 : 250,\n  intensity: 15,\n  duration_ms: 1500,\n  source: \"nodered_ai_diag\"\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 380,
+    "y": 340,
+    "wires": [
+      [
+        "mqtt_out_cmd_led_from_diag",
+        "debug_ai_diag_led"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_out_cmd_led_from_diag",
+    "type": "mqtt out",
+    "z": "tab_sbc_ai_copilot",
+    "name": "sbc/cmd/led",
+    "topic": "sbc/cmd/led",
+    "qos": "",
+    "retain": "",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "mqtt_broker_local",
+    "x": 600,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "debug_ai_intent",
+    "type": "debug",
+    "z": "tab_sbc_ai_copilot",
+    "name": "AI Intent",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 360,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "debug_ai_macro_gate",
+    "type": "debug",
+    "z": "tab_sbc_ai_copilot",
+    "name": "AI Macro Gate Out",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 620,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "debug_ai_diag",
+    "type": "debug",
+    "z": "tab_sbc_ai_copilot",
+    "name": "AI Diagnostic",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 370,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "debug_ai_diag_led",
+    "type": "debug",
+    "z": "tab_sbc_ai_copilot",
+    "name": "AI Diag LED Out",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 610,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "mqtt_broker_local",
+    "type": "mqtt-broker",
+    "name": "Local MQTT",
+    "broker": "127.0.0.1",
+    "port": "1883",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": "",
+    "closeTopic": "",
+    "closeQos": "0",
+    "closePayload": "",
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": "",
+    "sessionExpiry": ""
+  }
+]

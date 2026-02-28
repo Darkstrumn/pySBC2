@@ -61,11 +61,14 @@ def resolve_topics(effective):
         "cmd_led": _topic(command_topics.get("led"), "cmd/led"),
         "cmd_event": _topic(command_topics.get("event"), "cmd/event"),
         "cmd_led_frame": _topic(command_topics.get("led_frame"), "cmd/led_frame"),
+        "cmd_ai_mode": _topic(command_topics.get("ai_mode"), "cmd/ai_mode"),
         "io_raw_state": _topic(mqtt_cfg.get("io_raw_topic"), "io/raw_state"),
         "io_led_frame": _topic(mqtt_cfg.get("io_led_frame_topic"), "io/led_frame"),
         "event_raw_state": _topic(mqtt_cfg.get("event_raw_topic"), "events/raw_state"),
         "event_button": _topic(mqtt_cfg.get("event_button_topic"), "events/button"),
         "event_vessel_snapshot": _topic(mqtt_cfg.get("event_vessel_topic"), "events/vessel_snapshot"),
+        "event_ai_intent": _topic(mqtt_cfg.get("event_ai_intent_topic"), "events/ai_intent"),
+        "event_ai_diagnostic": _topic(mqtt_cfg.get("event_ai_diagnostic_topic"), "events/ai_diagnostic"),
     }
 
 
