@@ -67,8 +67,47 @@ else
   SUDO=""
 fi
 
+rewrite_apt_repo_url() {
+  local old_url="$1"
+  local new_url="$2"
+  local file
+
+  for file in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
+    [[ -f "${file}" ]] || continue
+    if grep -qF "${old_url}" "${file}"; then
+      echo "Updating apt source in ${file}: ${old_url} -> ${new_url}"
+      ${SUDO} sed -i "s|${old_url}|${new_url}|g" "${file}"
+    fi
+  done
+
+  return 0
+}
+
+apt_update_with_legacy_fallback() {
+  local apt_log
+  apt_log="$(mktemp)"
+
+  if ${SUDO} apt-get update > >(tee "${apt_log}") 2>&1; then
+    rm -f "${apt_log}"
+    return 0
+  fi
+
+  if ! grep -q "raspbian.raspberrypi.org/raspbian buster Release" "${apt_log}"; then
+    echo "apt-get update failed for a reason other than the known Raspbian buster repository retirement." >&2
+    rm -f "${apt_log}"
+    return 1
+  fi
+
+  echo "Detected retired Raspbian buster repository URL. Switching to archive mirror and retrying..."
+  rewrite_apt_repo_url "http://raspbian.raspberrypi.org/raspbian" "http://archive.raspbian.org/raspbian" || true
+  rewrite_apt_repo_url "https://raspbian.raspberrypi.org/raspbian" "http://archive.raspbian.org/raspbian" || true
+
+  rm -f "${apt_log}"
+  ${SUDO} apt-get -o Acquire::Check-Valid-Until=false update
+}
+
 echo "[1/6] Installing system packages..."
-${SUDO} apt-get update
+apt_update_with_legacy_fallback
 ${SUDO} apt-get install -y \
   python3 \
   python3-venv \

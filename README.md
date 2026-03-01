@@ -24,6 +24,9 @@ chmod +x scripts/install_rpi.sh
 Installer script:
 - `scripts/install_rpi.sh`
 
+Note:
+- On legacy Raspberry Pi OS `buster` images, the script automatically retries `apt-get update` against `archive.raspbian.org` if the retired `raspbian.raspberrypi.org` URL fails with "no longer has a Release file".
+
 Options:
 - `--with-node-red`
 - `--with-tensorflow`
