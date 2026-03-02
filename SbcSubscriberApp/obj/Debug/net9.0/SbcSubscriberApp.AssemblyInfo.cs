@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SbcSubscriberApp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f55a36e108d31af5856d9caf22f446e39016b628")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+63686410d8aa6ca5ebf45761b7e9165be6ee2da5")]
 [assembly: System.Reflection.AssemblyProductAttribute("SbcSubscriberApp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SbcSubscriberApp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
