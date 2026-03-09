@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "aEXd64P2caw=",
+  "success": true,
+  "projectFilePath": "U:\\TheHold\\DevCore\\ProtoLab\\python\\sbc\\SbcControllerCore\\SbcControllerCore.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\darks_wso0ht3\\.nuget\\packages\\mqttnet\\5.1.0.1559\\mqttnet.5.1.0.1559.nupkg.sha512"
+  ],
+  "logs": []
+}

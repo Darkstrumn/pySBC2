@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SbcSubscriberApp", "SbcSubscriberApp\SbcSubscriberApp.csproj", "{FBE0B9A5-5E58-4497-9A44-43F76056ECB1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SbcControllerCore", "SbcControllerCore\SbcControllerCore.csproj", "{057641CA-3E59-49C1-AA89-2BB67F1D2417}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,18 @@ Global
 		{FBE0B9A5-5E58-4497-9A44-43F76056ECB1}.Release|x64.Build.0 = Release|Any CPU
 		{FBE0B9A5-5E58-4497-9A44-43F76056ECB1}.Release|x86.ActiveCfg = Release|Any CPU
 		{FBE0B9A5-5E58-4497-9A44-43F76056ECB1}.Release|x86.Build.0 = Release|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Debug|x64.Build.0 = Debug|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Debug|x86.Build.0 = Debug|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Release|Any CPU.Build.0 = Release|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Release|x64.ActiveCfg = Release|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Release|x64.Build.0 = Release|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Release|x86.ActiveCfg = Release|Any CPU
+		{057641CA-3E59-49C1-AA89-2BB67F1D2417}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
