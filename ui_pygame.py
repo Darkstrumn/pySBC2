@@ -73,6 +73,7 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
         self.pygame.init()
         try:
             self.screen = self.pygame.display.set_mode((800, 480))
+            self.pygame.mouse.set_visible(False)
         except self.pygame.error:
             self.pygame.quit()
             raise
