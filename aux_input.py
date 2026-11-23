@@ -87,7 +87,12 @@ class AuxInput:
                         if event.value == 1 and event.code not in pressed:
                             pressed.add(event.code)
                             self._publish(surface, "key", event.code, 1)
-                            action = self.macros.get(surface, {}).get(str(event.code))
+                            bindings = self.macros.get(surface, {})
+                            names = ecodes.bytype[ecodes.EV_KEY]
+                            name = names.get(event.code)
+                            action = bindings.get(str(event.code))
+                            for alias in name if isinstance(name, list) else (name,):
+                                action = action or bindings.get(alias)
                             if action:
                                 self.run_macro(action)
                         elif event.value == 0 and event.code in pressed:

@@ -184,11 +184,12 @@ def main():
         CommandRouter(bus, input_matrix, event_sink=event_sink)
 
         if effective.get("touch_device"):
-            touch = TouchInput(
-                effective.get("touch_device"),
-                int(effective.get("touch_width", 800)),
-                int(effective.get("touch_height", 480)),
+            screen = getattr(ui, "screen", None)
+            width, height = (
+                screen.get_size() if hasattr(screen, "get_size")
+                else (int(effective.get("touch_width", 800)), int(effective.get("touch_height", 480)))
             )
+            touch = TouchInput(effective["touch_device"], width, height)
         sbc.touch_enabled = bool(touch and touch.enabled)
 
         errors = macro_engine.validate_macros()

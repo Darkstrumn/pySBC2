@@ -289,5 +289,30 @@ including `sbc/events/aux_input` when MQTT is enabled with its default topic
 prefix. Each event includes the surface, event type (`key` or `relative`),
 numeric evdev code, and value. Assign named local macros under
 `aux_key_macros.<surface>.<evdev-code>` to run them on key-down. Relative
-events are available to downstream mappings. The default profile leaves
-game-specific actions unassigned.
+events are available to downstream mappings. The bundled default profile includes the Elite layout below.
+
+### Elite Dangerous / Horizons N52 layout
+
+These inputs refer to the Linux key codes reported by the keypad. Verify the
+emitted codes if your n52 has been remapped. The two former switch outputs are
+preserved on the keypad. Bind F16 and F17 in Elite to use the suggested actions.
+
+| N52 input | Elite action | Host key |
+| --- | --- | --- |
+| 02 / Q | Cargo Scoop (former Buffer Material output) | F16 |
+| 04 / E | Ship Lights (former VT Location output) | F17 |
+| 05 / R | Landing Gear | L |
+| 10 / F | Hardpoints | U |
+| 07 / A | Target Ahead | T |
+| 12 / Z | Frame Shift Drive | J |
+
+Match the host keys to your Elite bindings. In the default `macro_output: log`
+mode, macro key events are available through the existing event sinks. A host
+subscriber must turn them into host key input when Elite runs on another machine.
+
+Use `python3 sbc-driver-test1.py --ui=pygame` on the Pi display. Tap **Main** or
+**Settings** in the top bar. In Settings, tap a switch assignment to cycle its
+options, then tap **Save & Apply**. Tap any of the six N52 bindings to cycle the profile macros before saving. For SDL-managed touch, leave `touch_device` empty. If you configure an
+evdev touchscreen, its absolute coordinates are scaled to the Pygame window.
+
+Layout references: [Belkin n52 manual](https://cache-www.belkin.com/support/dl/f8gpc100_man.pdf), [Steel Battalion in Elite](https://www.reddit.com/r/EliteDangerous/comments/g11em9), and [ITBSBC](https://github.com/kgmonteith/ITBSBC). The Elite action choices above are project defaults.

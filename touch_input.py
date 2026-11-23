@@ -29,21 +29,22 @@ class TouchInput:
 
         try:
             self.device = InputDevice(device_path)
+            self._abs_info = dict(self.device.capabilities(absinfo=True).get(3, []))
+            if not ({0, 1} <= self._abs_info.keys() or {53, 54} <= self._abs_info.keys()):
+                self.close()
+                return
             self.device.grab()
-            for code, info in self.device.absinfo.items():
-                self._abs_info[code] = info
             self.enabled = True
-        except Exception:
-            self.enabled = False
+        except OSError:
+            self.close()
 
     def close(self):
-        """Release device grab when shutting down."""
+        """Close the evdev descriptor and release its grab."""
         if self.device is None:
             return
-        try:
-            self.device.ungrab()
-        except Exception:
-            pass
+        self.device.close()
+        self.device = None
+        self.enabled = False
 
     def _scale(self, value, abs_info, target_max):
         """Map raw absolute axis values into [0, target_max)."""
@@ -52,12 +53,13 @@ class TouchInput:
         span = abs_info.max - abs_info.min
         if span <= 0:
             return None
-        return int((value - abs_info.min) * (target_max - 1) / span)
+        return max(0, min(target_max - 1, int((value - abs_info.min) * (target_max - 1) / span)))
 
     def poll(self):
         """Return `(x, y)` on touch release, else `None`."""
         if not self.enabled or self.device is None:
             return None
+        point = None
         try:
             for event in self.device.read():
                 if event.type == 3:  # EV_ABS
@@ -67,10 +69,12 @@ class TouchInput:
                     elif event.code in (1, 54):  # ABS_Y or ABS_MT_POSITION_Y
                         abs_info = self._abs_info.get(event.code)
                         self._last_y = self._scale(event.value, abs_info, self.screen_height)
-                elif event.type == 1 and event.code == 330:  # EV_KEY BTN_TOUCH
-                    self._touching = event.value == 1
-                    if not self._touching and self._last_x is not None and self._last_y is not None:
-                        return (self._last_x, self._last_y)
-        except Exception:
-            return None
-        return None
+                elif event.type == 1 and event.code == 330:  # BTN_TOUCH
+                    if self._touching and not event.value and None not in (self._last_x, self._last_y):
+                        point = (self._last_x, self._last_y)
+                    self._touching = bool(event.value)
+        except BlockingIOError:
+            pass
+        except OSError:
+            self.close()
+        return point
