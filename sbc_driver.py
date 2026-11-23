@@ -385,29 +385,20 @@ class SBCDriver:
 
     def update_gear_leds(self, gear_value, intensity=8):
         """Set static gear indicator LEDs for current gear value."""
+        target = None
+        if gear_value is not None:
+            if gear_value < 0:
+                target = self.GEAR_LED_FIRST + gear_value
+            else:
+                target = self.GEAR_LED_NEUTRAL + gear_value
+
+        intensity = self._clamp_intensity(intensity)
         dirty = False
         for led_id in range(self.GEAR_LED_MIN, self.GEAR_LED_MAX + 1):
-            if self.led_state.get(led_id, 0) != 0:
-                self.set_led(led_id, 0, send=False)
+            desired = intensity if led_id == target else 0
+            if self.led_state.get(led_id, 0) != desired:
+                self.set_led(led_id, desired, send=False)
                 dirty = True
-
-        if gear_value is None:
-            if dirty:
-                self.write_leds()
-            return
-
-        if gear_value < 0:
-            target = self.GEAR_LED_FIRST + gear_value
-        else:
-            target = self.GEAR_LED_NEUTRAL + gear_value
-
-        if target < self.GEAR_LED_MIN or target > self.GEAR_LED_MAX:
-            if dirty:
-                self.write_leds()
-            return
-
-        self.set_led(target, intensity, send=False)
-        dirty = True
         if dirty:
             self.write_leds()
 

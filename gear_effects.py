@@ -20,13 +20,11 @@ class GearEffectController:
     def update(self, gear_value):
         """Update gear lighting based on current parsed gear value."""
         if self.sbc.GEAR_REVERSE_FLASH and gear_value == -2:
-            self.sbc.update_gear_leds(None, self.sbc.gear_light_intensity)
             period = int(self.config.get("gear_r_blink_period_ms", 500))
             on_ms = int(self.config.get("gear_r_blink_on_ms", 250))
             self._apply_blink("GearR", period_ms=period, on_ms=on_ms)
             return
         if gear_value == 5:
-            self.sbc.update_gear_leds(None, self.sbc.gear_light_intensity)
             period = int(self.config.get("gear5_breathe_period_ms", 2000))
             min_val = int(self.config.get("gear5_breathe_min", 0))
             max_val = int(self.config.get("gear5_breathe_max", 15))

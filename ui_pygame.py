@@ -96,7 +96,6 @@ class PygameMFD:
             surf = self.font_small.render(self.status_message, True, self.dim)
             self.screen.blit(surf, (30, 440))
         self.pygame.display.flip()
-        self.clock.tick(30)
 
     def handle_touch(self, x, y):
         """Placeholder touch tab mapping; kept for API parity with console UI."""

@@ -2,6 +2,7 @@ import time
 import ast
 import json
 import subprocess
+from collections import deque
 from pathlib import Path
 
 """
@@ -32,6 +33,9 @@ class MacroEngine:
         self.layer_cycle_button = config.get("layer_cycle_button", "LeftJoySightChange")
         self.output_mode = str(config.get("macro_output", "log")).lower()
         self.active_keys = set()
+        self.cooperative_timing = False
+        self._pending_actions = deque()
+        self._resume_at = 0.0
         self.axis_active = {}
         self.gear_active = None
         self.layer = 0
@@ -119,25 +123,49 @@ class MacroEngine:
 
     def _run_tap(self, macro, press_ms=None, release_ms=None):
         """Execute a tap-style key macro (press, delay, release, delay)."""
+        self._schedule_action(self._tap_steps(macro, press_ms, release_ms))
+
+    def _schedule_action(self, action):
+        if self.cooperative_timing:
+            self._pending_actions.append(action)
+        else:
+            for delay_s in action:
+                time.sleep(delay_s)
+
+    def _advance_actions(self):
+        while self._pending_actions and time.monotonic() >= self._resume_at:
+            try:
+                delay_s = next(self._pending_actions[0])
+            except StopIteration:
+                self._pending_actions.popleft()
+            else:
+                self._resume_at = time.monotonic() + delay_s
+                return
+
+    def _tap_steps(self, macro, press_ms=None, release_ms=None):
         keys = macro.get("keys", [])
         if not keys:
             return
         press_delay = int(press_ms if press_ms is not None else macro.get("press_ms", 20))
         release_delay = int(release_ms if release_ms is not None else macro.get("release_ms", 20))
         self._press_keys(keys)
-        time.sleep(press_delay / 1000.0)
+        yield press_delay / 1000.0
         self._release_keys(keys)
-        time.sleep(release_delay / 1000.0)
+        yield release_delay / 1000.0
 
     def _run_hold_press(self, macro):
-        keys = macro.get("keys", [])
-        if keys:
-            self._press_keys(keys)
+        self._schedule_action(self._hold_steps(macro, True))
 
     def _run_hold_release(self, macro):
+        self._schedule_action(self._hold_steps(macro, False))
+
+    def _hold_steps(self, macro, pressed):
         keys = macro.get("keys", [])
-        if keys:
+        if pressed:
+            self._press_keys(keys)
+        else:
             self._release_keys(keys)
+        yield from ()
 
     def _behavior_from_led(self, led_name, default_led_mode):
         """Infer tap/hold behavior from LED mode semantics."""
@@ -348,9 +376,11 @@ class MacroEngine:
         return max_len
 
     def tick(self):
-        """Update active LED effects each frame."""
+        """Advance timed actions and update active LED effects each frame."""
+        self._advance_actions()
         now = time.monotonic()
         to_remove = []
+        dirty = False
         for led_name, effect in self.led_effects.items():
             duration = effect.get("duration_ms")
             if duration is not None and now - effect["start"] >= duration / 1000.0:
@@ -367,13 +397,20 @@ class MacroEngine:
                 cycle = (phase / period)
                 tri = 1 - abs(2 * cycle - 1)
                 intensity = int(effect["min"] + (effect["max"] - effect["min"]) * tri)
-            self.sbc.set_led(self.sbc.led_name_to_id[led_name], intensity, send=False)
-        if self.led_effects:
+            led_id = self.sbc.led_name_to_id[led_name]
+            intensity = self.sbc._clamp_intensity(intensity)
+            if self.sbc.led_state.get(led_id, 0) != intensity:
+                self.sbc.set_led(led_id, intensity, send=False)
+                dirty = True
+        if dirty:
             self.sbc.write_leds()
         for name in to_remove:
             self.led_effects.pop(name, None)
 
     def _run_steps(self, steps, context="tap"):
+        self._schedule_action(self._script_steps(steps, context))
+
+    def _script_steps(self, steps, context="tap"):
         """
         Execute scripted macro steps.
 
@@ -386,12 +423,12 @@ class MacroEngine:
                 then = step.get("then", [])
                 otherwise = step.get("else", [])
                 if self._eval_expr(expr):
-                    self._run_steps(then, context=context)
+                    yield from self._script_steps(then, context=context)
                 else:
-                    self._run_steps(otherwise, context=context)
+                    yield from self._script_steps(otherwise, context=context)
                 continue
             if "sleep_ms" in step:
-                time.sleep(int(step["sleep_ms"]) / 1000.0)
+                yield int(step["sleep_ms"]) / 1000.0
                 continue
             if "set_layer" in step:
                 self.layer = int(step["set_layer"])
@@ -406,7 +443,7 @@ class MacroEngine:
                     self._save_persisted_vars()
                 continue
             if "run_macro" in step:
-                self.run_macro(step["run_macro"])
+                yield from self._named_macro_steps(step["run_macro"])
                 continue
             if "press" in step:
                 payload = step["press"]
@@ -414,7 +451,7 @@ class MacroEngine:
                 hold_ms = int(payload.get("hold_ms", 20))
                 if key:
                     self._emit(key, True)
-                    time.sleep(hold_ms / 1000.0)
+                    yield hold_ms / 1000.0
                     self._emit(key, False)
                 continue
             if "down" in step:
@@ -738,15 +775,18 @@ class MacroEngine:
 
     def run_macro(self, name):
         """Run one macro by name, handling key or scripted definitions."""
+        self._schedule_action(self._named_macro_steps(name))
+
+    def _named_macro_steps(self, name):
         if not name:
             return
         macro = self._resolve_macro(name)
         if macro is None:
             return
         if isinstance(macro, list):
-            self._run_steps(macro, context="tap")
+            yield from self._script_steps(macro, context="tap")
         else:
-            self._run_tap(macro)
+            yield from self._tap_steps(macro)
 
     def _publish_event(self, payload):
         """Publish macro runtime events to optional external sink."""
