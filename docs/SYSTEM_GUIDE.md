@@ -316,3 +316,19 @@ options, then tap **Save & Apply**. Tap any of the six N52 bindings to cycle the
 evdev touchscreen, its absolute coordinates are scaled to the Pygame window.
 
 Layout references: [Belkin n52 manual](https://cache-www.belkin.com/support/dl/f8gpc100_man.pdf), [Steel Battalion in Elite](https://www.reddit.com/r/EliteDangerous/comments/g11em9), and [ITBSBC](https://github.com/kgmonteith/ITBSBC). The Elite action choices above are project defaults.
+
+
+The graphical MFD discovers direct evdev touchscreens automatically when
+`touch_device` is empty. Set `touch_device` to the desired input node if the Pi
+has multiple touchscreens. The runtime scales the absolute axes to the display
+and activates the visible target on release. The Pi user needs permission to
+read and grab the touchscreen node. SDL finger events are also supported when
+SDL provides them.
+
+In **Settings**, use **Switches**, **Nostromo N52**, or **GameVoice**. Use
+**Next** and **Previous** to browse the bindings and tap a row to cycle its
+macro. The N52 includes the wheel click and both scroll directions. Each scroll
+event can invoke one macro for its direction. GameVoice lists the buttons
+reported by the device when you open its tab. Its **Unmapped buttons** row
+controls the fallback macro, and a button explicitly set to **Unassigned**
+suppresses that fallback. Tap **Save & Apply** to persist the profile edits.

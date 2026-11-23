@@ -59,16 +59,34 @@ class AuxInput:
             "timestamp_ms": int(time.time() * 1000),
         })
 
+    def _key_aliases(self, code):
+        name = self.evdev.ecodes.bytype[self.evdev.ecodes.EV_KEY].get(code, str(code))
+        return tuple(name) if isinstance(name, (list, tuple)) else (name,)
+
+    def key_bindings(self, surface):
+        """List discovered key codes with their existing binding keys."""
+        if self.evdev is None:
+            return {}
+        keys = {}
+        bindings = self.macros.get(surface, {})
+        for device, name, _ in self.devices.values():
+            if name != surface:
+                continue
+            try:
+                codes = device.capabilities().get(self.evdev.ecodes.EV_KEY, [])
+            except OSError:
+                continue
+            for code in codes:
+                aliases = self._key_aliases(code)
+                key = next((item for item in (str(code), *aliases) if item in bindings), str(code))
+                keys[key] = aliases[0]
+        return keys
+
     def _key(self, surface, code, pressed):
         self._publish(surface, "key", code, int(pressed))
-        names = self.evdev.ecodes.bytype[self.evdev.ecodes.EV_KEY]
-        name = names.get(code, str(code))
-        aliases = name if isinstance(name, (list, tuple)) else (name,)
+        aliases = self._key_aliases(code)
         bindings = self.macros.get(surface, {})
-        action = bindings.get(str(code))
-        for alias in aliases:
-            action = action or bindings.get(alias)
-        action = action or bindings.get("*")
+        action = next((bindings[key] for key in (str(code), *aliases, "*") if key in bindings), None)
         if self.key_feedback is not None:
             self.key_feedback(surface, code, aliases[0], pressed, action)
         if pressed and action:
@@ -108,6 +126,11 @@ class AuxInput:
                             self._key(surface, event.code, False)
                     elif event.type == ecodes.EV_REL:
                         self._publish(surface, "relative", event.code, event.value)
+                        if event.code == ecodes.REL_WHEEL and event.value:
+                            key = "REL_WHEEL_UP" if event.value > 0 else "REL_WHEEL_DOWN"
+                            action = self.macros.get(surface, {}).get(key)
+                            if action:
+                                self.run_macro(action)
             except OSError:
                 self._release(surface, pressed)
                 device.close()

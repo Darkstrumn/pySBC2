@@ -8,6 +8,19 @@ from ui_common import build_dashboard, gear_label
 """Pygame-based MFD UI backend."""
 
 
+N52_CONTROLS = (
+    ("KEY_TAB", "01  Tab"), ("KEY_Q", "02  Q"), ("KEY_W", "03  W"),
+    ("KEY_E", "04  E"), ("KEY_R", "05  R"), ("KEY_CAPSLOCK", "06  Caps"),
+    ("KEY_A", "07  A"), ("KEY_S", "08  S"), ("KEY_D", "09  D"),
+    ("KEY_F", "10  F"), ("KEY_LEFTSHIFT", "11  Shift"), ("KEY_Z", "12  Z"),
+    ("KEY_X", "13  X"), ("KEY_C", "14  C"), ("BTN_MIDDLE", "15  Wheel click"),
+    ("REL_WHEEL_UP", "Wheel up"), ("REL_WHEEL_DOWN", "Wheel down"),
+    ("KEY_UP", "D-pad up"), ("KEY_DOWN", "D-pad down"),
+    ("KEY_LEFT", "D-pad left"), ("KEY_RIGHT", "D-pad right"),
+    ("KEY_SPACE", "Thumb pad"), ("KEY_LEFTALT", "Thumb button"),
+)
+
+
 class PygameMFD:
     """Graphical dashboard UI used as an alternative to curses console UI."""
 
@@ -21,7 +34,11 @@ class PygameMFD:
         self.tab = "main"
         self.targets = []
         self.pending_gates = None
-        self.pending_n52 = None
+        self.pending_bindings = None
+        self.settings_surface = None
+        self.settings_page = 0
+        self.game_voice_keys = {}
+        self.aux_key_bindings = lambda surface: {}
         try:
             import pygame as _pygame
         except ImportError as exc:
@@ -116,8 +133,18 @@ class PygameMFD:
 
     def _open_settings(self):
         self.pending_gates = dict(self.config_view.get("aux_surface_switches", {}))
-        self.pending_n52 = dict(self.config_view.get("aux_key_macros", {}).get("nostromo_n52", {}))
+        self.pending_bindings = {
+            surface: dict(bindings)
+            for surface, bindings in self.config_view.get("aux_key_macros", {}).items()
+        }
         self.tab = "settings"
+        self._select_settings_surface(None)
+
+    def _select_settings_surface(self, surface):
+        self.settings_surface = surface
+        self.settings_page = 0
+        if surface == "game_voice":
+            self.game_voice_keys = self.aux_key_bindings(surface)
 
     def _next_gate(self, surface):
         other_gates = {gate for name, gate in self.pending_gates.items() if name != surface}
@@ -131,9 +158,10 @@ class PygameMFD:
 
     def _next_macro(self, key):
         choices = [None] + sorted(self.config_view.get("macros", {}))
-        current = self.pending_n52.get(key)
+        bindings = self.pending_bindings.setdefault(self.settings_surface, {})
+        current = bindings.get(key, bindings.get("*"))
         index = choices.index(current) if current in choices else -1
-        self.pending_n52[key] = choices[(index + 1) % len(choices)]
+        bindings[key] = choices[(index + 1) % len(choices)]
 
     def _save_settings(self):
         root = dict(self.config_root)
@@ -141,9 +169,7 @@ class PygameMFD:
         active = root.get("active_profile", "default")
         profile = dict(profiles.get(active, {}))
         profile["aux_surface_switches"] = dict(self.pending_gates)
-        bindings = dict(self.config_view.get("aux_key_macros", {}))
-        bindings["nostromo_n52"] = dict(self.pending_n52)
-        profile["aux_key_macros"] = bindings
+        profile["aux_key_macros"] = self.pending_bindings
         profiles[active] = profile
         root["profiles"] = profiles
         temp_path = None
@@ -189,23 +215,56 @@ class PygameMFD:
             self._text(name, 520, 125 + index * 22)
 
     def _render_settings(self):
-        self._text("AUXILIARY SWITCH ASSIGNMENTS", 22, 82, self.font_label, self.accent)
-        for surface, label, y in (("game_voice", "Game Voice", 115), ("nostromo_n52", "Nostromo n52", 172)):
-            self._text(label, 22, y + 15, self.font_label)
-            gate = self.pending_gates.get(surface)
-            self._button(gate[6:] if gate and gate.startswith("Toggle") else (gate or "Disabled"),
-                         (235, y, 340, 46), lambda surface=surface: self._next_gate(surface))
-        self._text("N52 KEY MAPPINGS", 22, 238, self.font_label, self.accent)
-        for index, key in enumerate(("KEY_Q", "KEY_E", "KEY_R", "KEY_F", "KEY_A", "KEY_Z")):
-            x = 22 + (index // 3) * 378
-            y = 263 + (index % 3) * 43
-            macro = self.pending_n52.get(key) or "Unassigned"
-            label = f"{key[4:]}  {macro}"[:29]
-            rect = (x, y, 360, 39)
-            self._box(rect)
-            self._text(label, x + 12, y + 10)
-            self.targets.append((self.pygame.Rect(rect), lambda key=key: self._next_macro(key)))
+        for index, (surface, label) in enumerate((
+            (None, "Switches"), ("nostromo_n52", "Nostromo N52"), ("game_voice", "GameVoice"),
+        )):
+            self._button(label, (22 + index * 230, 73, 214, 45),
+                         lambda surface=surface: self._select_settings_surface(surface),
+                         self.settings_surface == surface)
+
+        if self.settings_surface is None:
+            for surface, label, y in (
+                ("game_voice", "Game Voice", 151), ("nostromo_n52", "Nostromo n52", 214),
+            ):
+                self._text(label, 22, y + 15, self.font_label)
+                gate = self.pending_gates.get(surface)
+                self._button(gate[6:] if gate and gate.startswith("Toggle") else (gate or "Disabled"),
+                             (235, y, 340, 46), lambda surface=surface: self._next_gate(surface))
+        else:
+            self._render_binding_page()
         self._button("Save & Apply", (604, 399, 180, 45), self._save_settings, selected=True)
+
+    def _render_binding_page(self):
+        bindings = self.pending_bindings.get(self.settings_surface, {})
+        if self.settings_surface == "nostromo_n52":
+            controls = dict(N52_CONTROLS)
+        else:
+            controls = {"*": "Unmapped buttons"}
+            controls.update(self.game_voice_keys)
+        for key in bindings:
+            controls.setdefault(key, key)
+        entries = list(controls.items())
+        page_size = 10
+        start = self.settings_page * page_size
+        for index, (key, label) in enumerate(entries[start:start + page_size]):
+            x = 22 + (index // 5) * 378
+            y = 131 + (index % 5) * 50
+            macro = bindings.get(key, bindings.get("*")) or "Unassigned"
+            rect = (x, y, 360, 46)
+            self._box(rect)
+            self._text(label[:36], x + 10, y + 4, color=self.accent)
+            self._text(macro[:36], x + 10, y + 24)
+            self.targets.append((self.pygame.Rect(rect), lambda key=key: self._next_macro(key)))
+        if start:
+            self._button("Previous", (22, 399, 130, 45), lambda: self._move_settings_page(-1))
+        if start + page_size < len(entries):
+            self._button("Next", (164, 399, 110, 45), lambda: self._move_settings_page(1))
+        self._text(f"Page {self.settings_page + 1} / {max(1, (len(entries) + 9) // 10)}", 300, 414)
+        if self.settings_surface == "game_voice" and not self.game_voice_keys:
+            self._text("Connect GameVoice and reopen this tab to see its buttons.", 22, 363, color=self.dim)
+
+    def _move_settings_page(self, offset):
+        self.settings_page += offset
 
     def render(self, state):
         """Render the startup view or the active MFD page."""
@@ -218,8 +277,13 @@ class PygameMFD:
                     self._open_settings()
                 elif event.key == pygame.K_d:
                     self.tab = "main"
-            if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-                self.handle_touch(*event.pos)
+            if not self.sbc.touch_enabled:
+                if event.type == getattr(pygame, "FINGERUP", None):
+                    width, height = self.screen.get_size()
+                    self.handle_touch(int(event.x * width), int(event.y * height))
+                elif (event.type == pygame.MOUSEBUTTONUP and event.button == 1
+                      and not getattr(event, "touch", False)):
+                    self.handle_touch(*event.pos)
         if self.boot_mode:
             self._render_boot()
             return

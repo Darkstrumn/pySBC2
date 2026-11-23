@@ -183,13 +183,13 @@ def main():
         vessel_model = build_vessel_model(effective, input_matrix=input_matrix, event_sink=event_sink)
         CommandRouter(bus, input_matrix, event_sink=event_sink)
 
-        if effective.get("touch_device"):
+        if effective.get("touch_device") or hasattr(ui, "aux_key_bindings"):
             screen = getattr(ui, "screen", None)
             width, height = (
                 screen.get_size() if hasattr(screen, "get_size")
                 else (int(effective.get("touch_width", 800)), int(effective.get("touch_height", 480)))
             )
-            touch = TouchInput(effective["touch_device"], width, height)
+            touch = TouchInput(effective.get("touch_device"), width, height)
         sbc.touch_enabled = bool(touch and touch.enabled)
 
         errors = macro_engine.validate_macros()
@@ -233,6 +233,8 @@ def main():
                 sbc, effective, event_sink, macro_engine.run_macro,
                 key_feedback=getattr(ui, "set_aux_key", None),
             )
+            if hasattr(ui, "aux_key_bindings"):
+                ui.aux_key_bindings = aux_input.key_bindings
             sbc.startup_sequence()
             aux_input.poll(time.monotonic(), active=False)
             vessel_model.on_boot_complete()
