@@ -84,7 +84,7 @@ class PygameMFD:
         self.screen.blit((font or self.font_small).render(str(label), True, color or self.text), (x, y))
 
     def _box(self, rect, color=None):
-        self.pygame.draw.rect(self.screen, color or self.panel, rect, border_radius=8)
+        self.pygame.draw.rect(self.screen, color or self.panel, rect)
 
     def _button(self, label, rect, action, selected=False):
         self._box(rect, (26, 82, 100) if selected else self.panel)
