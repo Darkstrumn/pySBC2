@@ -141,6 +141,11 @@ def load_config(path):
                 "deactivate": "Eject",
             },
         },
+        "aux_surface_switches": {
+            "game_voice": "ToggleVTLocation",
+            "nostromo_n52": "ToggleBufferMaterial",
+        },
+        "aux_key_macros": {},
         "touch_device": "",
         "touch_width": 800,
         "touch_height": 480,

@@ -145,6 +145,11 @@
         "include_raw_state": false
       },
       "macro_output": "log",
+      "aux_surface_switches": {
+        "game_voice": "ToggleVTLocation",
+        "nostromo_n52": "ToggleBufferMaterial"
+      },
+      "aux_key_macros": {},
       "control_macros": {
         "Eject": { "action": "ELITE_ABORT", "behavior": "from_led" },
         "CockpitHatch": { "action": "ELITE_LANDING_GEAR", "behavior": "from_led" },
@@ -152,9 +157,7 @@
         "Start": { "action": "ELITE_TARGET_AHEAD", "behavior": "from_led" },
         "ToggleFilterControl": { "action": "KEY_F13", "behavior": "from_led" },
         "ToggleOxygenSupply": { "action": "KEY_F14", "behavior": "from_led" },
-        "ToggleFuelFlowRate": { "action": "KEY_F15", "behavior": "from_led" },
-        "ToggleBufferMaterial": { "action": "KEY_F16", "behavior": "from_led" },
-        "ToggleVTLocation": { "action": "KEY_F17", "behavior": "from_led" }
+        "ToggleFuelFlowRate": { "action": "KEY_F15", "behavior": "from_led" }
       },
       "macros": {
         "powerup": [

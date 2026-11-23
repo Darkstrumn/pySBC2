@@ -267,3 +267,27 @@ powershell -ExecutionPolicy Bypass -File services/start_process_services.ps1
 2. Keep default mode as `advisory` until confidence metrics stabilize.
 3. Add per-vehicle config profiles and AI label maps.
 4. Add scenario capture logs for offline model training and regression tests.
+
+### Auxiliary control surfaces
+
+In the Python read runtime, **VT Location** enables the Microsoft Game Voice
+(`045e:003b`) and **Buffer Material** enables the Nostromo n52
+(`050d:0815`). The runtime grabs their evdev nodes, including the n52 keypad
+and wheel, so auxiliary input stays inside the controller runtime. The running
+user needs permission to read and grab those input nodes. The SBC and the
+auxiliary devices can start independently, and reconnects are detected during
+normal operation.
+
+The active profile's `aux_surface_switches` maps `game_voice` and
+`nostromo_n52` to SBC switch names. Set a mapping to JSON `null` to leave the
+surface disengaged and free that SBC switch for `control_macros`. Set a
+different switch name to remap the gate. The default profile assigns these
+switches to gating and leaves their ordinary key macros unassigned.
+
+Enabled input is available as `aux_input` events on the existing event sinks,
+including `sbc/events/aux_input` when MQTT is enabled with its default topic
+prefix. Each event includes the surface, event type (`key` or `relative`),
+numeric evdev code, and value. Assign named local macros under
+`aux_key_macros.<surface>.<evdev-code>` to run them on key-down. Relative
+events are available to downstream mappings. The default profile leaves
+game-specific actions unassigned.

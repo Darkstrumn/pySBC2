@@ -535,6 +535,17 @@ class TelemetryService(PollingService):
         )
 
 
+class AuxInputService(PollingService):
+    """Poll auxiliary surfaces after the main controller report."""
+
+    def __init__(self, aux_input, interval_ms):
+        super().__init__("aux_input", interval_ms)
+        self.aux_input = aux_input
+
+    def tick(self, now_s):
+        self.aux_input.poll(now_s)
+
+
 class UIService(PollingService):
     """Render UI and process touch input at UI-oriented cadence."""
 
@@ -652,6 +663,7 @@ def build_services(
     event_sink=None,
     bus=None,
     runtime=None,
+    aux_input=None,
 ):
     """Create the v1.0 service set and return list ordered by dependency."""
     services_cfg = effective.get("services", {}) if isinstance(effective, dict) else {}
@@ -711,6 +723,8 @@ def build_services(
         macro_service,
         telemetry_service,
     ]
+    if aux_input is not None:
+        service_list.insert(1, AuxInputService(aux_input, reader_ms))
     if ui is not None:
         service_list.append(UIService(ui, touch, macro_engine, state_provider, interval_ms=ui_ms))
     if runtime is not None:
