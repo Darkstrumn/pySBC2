@@ -120,7 +120,6 @@ def main():
     touch = None
     event_server = None
     mqtt_bridge = None
-    event_sink = None
 
     bus = LocalEventBus()
     audit_cfg = effective.get("audit", {})
@@ -153,6 +152,7 @@ def main():
             ui.config_root = config
             ui.config_view = effective
 
+    runtime_stopped = False
     try:
         ui = init_ui(ui_mode, sbc, effective, config, "sbc_config.json", reload_callback=reload_callback)
         sbc.ui = ui
@@ -244,11 +244,22 @@ def main():
                 runtime=runtime,
             )
             audit_sink.log("runtime_started", {"mode": "read", "runtime": "services_v1"}, service="runtime")
+            event_sink.start()
             runtime.run()
-            audit_sink.log("runtime_stopped", {"reason": "shutdown_request"}, service="runtime")
+            runtime_stopped = True
             sbc.graceful_shutdown()
             return
     finally:
+        events_drained = event_sink.stop()
+        if not events_drained or event_sink.dropped_events:
+            print(
+                "SBC event delivery: {} dropped, queue drained: {}".format(
+                    event_sink.dropped_events, events_drained
+                ),
+                file=sys.stderr,
+            )
+        if runtime_stopped and events_drained:
+            audit_sink.log("runtime_stopped", {"reason": "shutdown_request"}, service="runtime")
         if ui is not None:
             ui.teardown()
         if touch is not None:
