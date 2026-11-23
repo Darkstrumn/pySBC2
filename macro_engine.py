@@ -580,6 +580,13 @@ class MacroEngine:
             return self.vars.get(node.id)
         if isinstance(node, ast.Constant):
             return node.value
+        # Python 3.7's parser still emits these concrete literal nodes.
+        if isinstance(node, ast.Str):
+            return node.s
+        if isinstance(node, ast.Num):
+            return node.n
+        if isinstance(node, ast.NameConstant):
+            return node.value
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             func = node.func.id
             args = [self._eval_node(a) for a in node.args]
@@ -742,7 +749,7 @@ class MacroEngine:
             return self._validate_expr_tree(node.left) and all(self._validate_expr_tree(c) for c in node.comparators)
         if isinstance(node, ast.Name):
             return node.id in {"gear", "tuner", "layer"} or True
-        if isinstance(node, ast.Constant):
+        if isinstance(node, (ast.Constant, ast.Str, ast.Num, ast.NameConstant)):
             return True
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             if node.func.id not in allowed_calls:

@@ -23,11 +23,15 @@ class PygameMFD:
         self.pending_n52 = None
         try:
             import pygame as _pygame
-        except Exception as exc:
-            raise RuntimeError("pygame not available") from exc
+        except ImportError as exc:
+            raise RuntimeError(f"pygame import failed: {exc}") from exc
         self.pygame = _pygame
         self.pygame.init()
-        self.screen = self.pygame.display.set_mode((800, 480))
+        try:
+            self.screen = self.pygame.display.set_mode((800, 480))
+        except self.pygame.error:
+            self.pygame.quit()
+            raise
         self.pygame.display.set_caption("SBC MFD")
         self.clock = self.pygame.time.Clock()
         self.font_title = self.pygame.font.SysFont("DejaVu Sans", 22)
