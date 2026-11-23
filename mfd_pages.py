@@ -2,7 +2,8 @@
 
 import json
 
-from mfd_settings import LED_MODES, THEMES
+from mfd_settings import BUTTON_PRESETS, THEMES
+from ship_power import POWER_CONTROLS
 
 
 class MFDSettingsPages:
@@ -57,31 +58,53 @@ class MFDSettingsPages:
             action = action[self.control_layer % len(action)] if action else ""
         self.control_action = action or ""
         self.control_mode = self.sbc.led_modes.get(led, "toggle")
-        self.control_hold = str(self.config_view.get("button_confirm_ms", {}).get(led, 0))
+        duration = self.config_view.get("button_confirm_ms", {}).get(led, 0)
+        self.control_hold = str(duration or (1200 if name in POWER_CONTROLS else 0))
+        self.control_preset = "Current configuration"
+        _, peers = self.sbc._parse_led_mode(self.control_mode)
+        self.control_peers = ",".join(peers)
+
+    def _select_preset(self, value):
+        if value == "Current configuration":
+            self._select_control(self.control)
+            return
+        self.control_preset = value
+        self.control_mode, duration = BUTTON_PRESETS[value]
+        self.control_hold = str(duration)
+
+    def _edit_control_action(self, field):
+        fields = {"action": ("KEY_ action or macro name", "control_action"),
+                  "hold": ("Hold duration in milliseconds", "control_hold"),
+                  "peers": ("Comma-separated LED names, e.g. F2,F3", "control_peers")}
+        self._edit_text(*fields[field])
 
     def _render_buttons(self):
         controls = [self.sbc.button_names[index] for index in self.sbc.button_to_led_name]
         if self.control not in controls:
             self._select_control(controls[0])
         self._step("Choose an SBC control", self.control, controls, self._select_control, 98)
-        self._step("LED animation", self.control_mode, tuple(dict.fromkeys((*LED_MODES, self.control_mode))),
-                   lambda value: setattr(self, "control_mode", value), 171)
+        if self.control in POWER_CONTROLS:
+            label = "Guarded Ignition: Off / On / Standby" if self.control == "Ignition" else "Guarded Drive Start: Standby / On"
+            self._text(label, 22, 172, self.font_label, self.accent)
+        else:
+            self._step("Button preset", self.control_preset, ["Current configuration", *BUTTON_PRESETS],
+                       self._select_preset, 171)
         choices = list(dict.fromkeys(["", *sorted(self.config_view.get("macros", {})), self.control_action]))
         self._step("Action (blank clears mapping)", self.control_action, choices,
                    lambda value: setattr(self, "control_action", value), 244)
-        self._choose(f"Hold: {self.control_hold} ms", [
-            ("action", "Enter KEY_ action"), ("hold", "Edit hold time"), ("save", "Save & Apply"),
+        linked = self.control_mode in ("exclusive", "selective")
+        self._choose(f"Peers: {self.control_peers}" if linked else f"Hold: {self.control_hold} ms", [
+            ("action", "Enter KEY_ action"), ("peers", "Edit LED peers") if linked else ("hold", "Edit hold time"),
+            ("save", "Save & Apply"),
         ], self._button_setting, 330)
 
     def _button_setting(self, field):
-        if field == "action":
-            self._edit_text("KEY_ action or macro name", "control_action")
-        elif field == "hold":
-            self._edit_text("Hold duration in milliseconds", "control_hold")
+        if field != "save":
+            self._edit_control_action(field)
         else:
             self._apply_from_panel(kind="button", name=self.control, mode=self.control_mode,
                                    action=self.control_action, hold_ms=self.control_hold,
-                                   layer=self.control_layer)
+                                   layer=self.control_layer, preset=self.control_preset, peers=self.control_peers)
 
     def _select_macro(self, name):
         self.macro_name = name

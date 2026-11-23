@@ -11,6 +11,14 @@ class HoldConfirmation:
         self.started = 0.0
         self.confirmed = False
 
+    def cancel(self):
+        self.phase = "idle"
+        self.confirmed = False
+
+    def abort(self, now):
+        self.phase, self.started = "aborted", now
+        self.confirmed = False
+
     def begin_confirmation(self, now):
         if self.phase == "pending":
             self.phase = "confirmed"
@@ -22,7 +30,7 @@ class HoldConfirmation:
         elapsed = now - self.started
         if self.phase == "holding":
             if not pressed:
-                self.phase, self.started = "aborted", now
+                self.abort(now)
                 elapsed = 0.0
             elif elapsed >= self.hold_s:
                 self.phase = "pending"

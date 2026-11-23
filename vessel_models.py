@@ -36,6 +36,7 @@ class CoreVesselModel:
             "online": False,
         }
         self._control_state = {}
+        self.guarded_power = False
 
     def reload_config(self, effective_config):
         """Reload model-specific config without resetting runtime state."""
@@ -72,6 +73,25 @@ class CoreVesselModel:
         self.state["online"] = True
         self.state["startup_state"] = "boot_complete"
         self._emit("vessel_boot_complete", {"state": self.snapshot()})
+
+    def sync_ship_power(self, power):
+        """Publish the guarded power state as the vessel's runtime state."""
+        if self.model_type == "app":
+            return
+        self.guarded_power = True
+        updated = {
+            "ignition": power.ignition.lower(),
+            "engines": power.engines,
+            "online": power.engines,
+            "reactor_ready": not power.missing,
+            "power_state": "main_reactor" if power.engines else
+                           {"On": "ignition", "Standby": "standby", "Off": "offline"}[power.ignition],
+            "startup_state": "online" if power.engines else power.ignition.lower(),
+        }
+        changed = any(self.state.get(key) != value for key, value in updated.items())
+        self.state.update(updated)
+        if changed:
+            self._emit("vessel_power_changed", {"state": self.snapshot()})
 
     def tick(self):
         """Optional periodic hook for time-based state logic. Override as needed."""
@@ -165,6 +185,8 @@ class MechVesselModel(CoreVesselModel):
         hatch_name = self._map_control("hatch")
         ignition_name = self._map_control("ignition")
         start_name = self._map_control("start")
+        if self.guarded_power and control_name in (ignition_name, start_name):
+            return
 
         # Hatch close transitions from fully offline to capacitor/boot preparation.
         if control_name == hatch_name and pressed and self.state["power_state"] == "offline":
@@ -233,6 +255,8 @@ class ShipVesselModel(CoreVesselModel):
         crew_ready_name = self._map_control("crew_ready")
         ignition_name = self._map_control("ignition")
         start_name = self._map_control("start")
+        if self.guarded_power and control_name in (ignition_name, start_name):
+            return
 
         # Crew-ready signal starts capacitor/bootstrap phase.
         if control_name == crew_ready_name and pressed and self.state["power_state"] == "offline":

@@ -1,5 +1,7 @@
 import time
 import ast
+
+from ship_power import POWER_CONTROLS
 import json
 import subprocess
 from collections import deque
@@ -237,7 +239,15 @@ class MacroEngine:
     def handle_buttons(self, state, default_led_mode):
         """Process configured control mappings from physical button edge state."""
         confirmations = getattr(self.sbc, "hold_confirmations", {})
+        power = getattr(self.sbc, "ship_power", None)
+        if power is not None:
+            for name in power.transitions:
+                action, _, press_ms, release_ms = self._resolve_control_action(name)
+                macro = self._resolve_macro(action) if action else None
+                self._dispatch_action(macro, "tap", True, True, press_ms, release_ms)
         for control_name in self.control_macros:
+            if power is not None and control_name in POWER_CONTROLS:
+                continue
             index = self.sbc.button_name_to_index.get(control_name)
             if self.sbc.button_to_led_name.get(index) in confirmations:
                 continue

@@ -8,6 +8,7 @@ from pathlib import Path
 from mfd_layout import MFDLayout
 from mfd_pages import MFDSettingsPages
 from mfd_settings import MFDSettings, THEMES
+from ship_power import POWER_CONTROLS, PREFLIGHT_SWITCHES
 from ui_common import build_dashboard, gear_label
 
 """Pygame-based MFD UI backend."""
@@ -192,7 +193,7 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
         other_gates = {gate for name, gate in self.pending_gates.items() if name != surface}
         choices = [None] + [
             name for name in self.sbc.button_names
-            if name.startswith("Toggle") and name not in other_gates
+            if (name.startswith("Toggle") or name in POWER_CONTROLS) and name not in other_gates
         ]
         current = self.pending_gates.get(surface)
         index = choices.index(current) if current in choices else -1
@@ -341,19 +342,23 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
                       and not getattr(event, "touch", False)):
                     self.handle_touch(*event.pos)
         if self.boot_mode:
-            self._render_boot()
+            self._render_boot(state)
             return
         self.targets.clear()
         self.screen.fill(self.bg)
         theme = self.config_view.get("mfd_theme", "elite")
         self.accent = THEME_ACCENTS.get(theme, THEME_ACCENTS["elite"])
         confirmation = self.sbc.hold_confirmations.get("TankDetach")
+        power = self.sbc.ship_power
         active = self.config_root.get("active_profile", "default")
         values = {
             "theme": THEMES.get(theme, THEMES["elite"]),
             "profile": f"Profile  {active}",
             "flight": f"Gear  {gear_label(state['gear'])}     Tuner  {state['tuner']}     Layer  {self.layer}",
-            "confirmation": f"Tank Detach  {confirmation.phase.title()}" if confirmation and confirmation.phase != "idle" else "",
+            "confirmation": (
+                f"Tank Detach  {confirmation.phase.title()}" if confirmation and confirmation.phase != "idle"
+                else f"Ignition  {power.ignition.upper()}     Drives  {'ON' if power.engines else 'STANDBY'}"
+            ),
         }
         if self.tab == "about":
             import usb
@@ -371,13 +376,15 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
             self.layout.draw(self, self.layout.pages["settings-back"], values, widgets)
         if self.editor:
             self._render_editor()
+        elif self.tab == "main" and power.message.startswith("Ignition interlock"):
+            self._preflight(state, "IGNITION INTERLOCK", power.message, top=76)
         elif self.tab in self.layout.pages:
             self.layout.draw(self, self.layout.pages[self.tab], values, widgets)
         elif self.tab == "diagnostics":
             self._render_diagnostics(state)
         else:
             getattr(self, "_render_" + self.tab)()
-        status = self._footer_status()
+        status = self.sbc.ship_power.message or self._footer_status()
         if status:
             self._text(status, 22, 450, color=self.dim, max_width=752)
         pygame.display.flip()
@@ -391,16 +398,39 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
                     self.targets.clear()
                     break
 
-    def _render_boot(self):
-        """Render simplified boot status page."""
-        spinner = ["-", "\\", "|", "/"][self._boot_spinner % 4]
-        self._boot_spinner += 1
-        self.screen.fill(self.bg)
-        title = self.font_title.render("STEEL BATTALION CONTROLLER BIOS", True, self.text)
-        self.screen.blit(title, (30, 30))
-        line1 = self.font_label.render(f"[{spinner}] Stage: {self.boot_stage}", True, self.text)
-        line2 = self.font_label.render(f"Status: {self.boot_message}", True, self.text)
-        self.screen.blit(line1, (30, 70))
-        self.screen.blit(line2, (30, 95))
+    def _preflight(self, state, stage, instruction, top=76):
+        amber = (255, 156, 58)
+        self._box((18, top, 764, 313), (29, 23, 17))
+        self._box((18, top, 764, 3), amber)
+        self._text(stage, 38, top + 18, self.font_title, amber)
+        self._text(instruction, 38, top + 56, self.font_label, max_width=722)
+        for row, (name, label) in enumerate(PREFLIGHT_SWITCHES.items()):
+            index = self.sbc.button_name_to_index[name]
+            enabled = state["buttons"][index]
+            y = top + 94 + row * 31
+            self._box((38, y, 720, 27), (39, 31, 23))
+            color = (157, 218, 144) if enabled else amber
+            self._box((48, y + 7, 7, 13), color)
+            self._text(label, 68, y + 4)
+            self._text("ON" if enabled else "SET ON", 646, y + 4, color=color)
+        power = self.sbc.ship_power
+        self._text(f"IGNITION  {power.ignition.upper()}     DRIVES  {'ON' if power.engines else 'STANDBY'}",
+                   38, top + 264, self.font_label, amber)
+
+    def _render_boot(self, state):
+        """Render the flight computer's preflight checklist."""
+        instructions = {
+            "Boot": ("FLIGHT COMPUTER", "Stand by while the flight computer initializes."),
+            "Diagnostics": ("SELF-TEST COMPLETE", "Press Cockpit Hatch to secure the cockpit."),
+            "CockpitHatch": ("SECURE COCKPIT", "Press Cockpit Hatch to continue."),
+            "Toggles": ("PREFLIGHT CHECKS", "Set each required switch to ON."),
+            "Ignition": ("ARM IGNITION", "Press Ignition to power the ship and enable the Nostromo N52."),
+            "Start": ("ENGAGE DRIVES", "Press Start to bring the drives and GameVoice online."),
+            "Power": ("DRIVES ONLINE", "Stand by while the controller finishes its lamp check."),
+        }
+        stage, instruction = instructions.get(self.boot_stage, (self.boot_stage, self.boot_message))
+        self.screen.fill((15, 13, 11))
+        self._text("SHIP SYSTEMS   /   STARTUP", 22, 24, self.font_title, (255, 156, 58))
+        self._preflight(state, stage, instruction, top=73)
         self.pygame.display.flip()
         self.clock.tick(10)

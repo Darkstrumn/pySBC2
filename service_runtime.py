@@ -445,10 +445,10 @@ class ModelService(PollingService):
         for control_name, index in self.sbc.button_name_to_index.items():
             if self.sbc.button_changed(index):
                 self.vessel_model.on_control_change(
-                    control_name,
-                    self.sbc.get_button_state(index),
+                    control_name, self.sbc.get_button_state(index),
                     logical_state=self.sbc.get_logical_state(control_name),
                 )
+        self.vessel_model.sync_ship_power(self.sbc.ship_power)
 
     def tick(self, now_s):
         if self.sbc.raw_control_data is None:

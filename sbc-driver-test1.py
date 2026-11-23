@@ -239,6 +239,7 @@ def main():
             sbc.startup_sequence()
             aux_input.poll(time.monotonic(), active=False)
             vessel_model.on_boot_complete()
+            vessel_model.sync_ship_power(sbc.ship_power)
             macro_engine.run_macro(effective.get("powerup_macro", ""))
             macro_engine.cooperative_timing = True
 

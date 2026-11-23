@@ -7,6 +7,7 @@ from collections import deque
 
 from analog_jitter import AdaptiveJitter
 from hold_confirmation import HoldConfirmation
+from ship_power import POWER_CONTROLS, PREFLIGHT_SWITCHES, ShipPower
 
 """
 Hardware driver and controller-state adapter for the Steel Battalion Controller.
@@ -147,6 +148,8 @@ class SBCDriver:
         self.led_modes = {}
         self.analog_config = {}
         self.hold_confirmations = {}
+        self.ship_power = ShipPower()
+        self.linked_peers = {}
         self.analog_samples = {}
         self.analog_jitter = {}
         self.logical_state = {}
@@ -423,14 +426,24 @@ class SBCDriver:
         self.gear_light_intensity = self._clamp_intensity(intensity)
 
     def set_hold_confirmations(self, durations):
+        self.ship_power.set_hold_times(durations)
         self.hold_confirmations = {
             name: HoldConfirmation(duration)
             for name, duration in durations.items()
-            if name in self.led_name_to_button_index and isinstance(duration, (int, float)) and duration > 0
+            if name in self.led_name_to_button_index and name not in POWER_CONTROLS
+            and isinstance(duration, (int, float)) and duration > 0
         }
 
     def set_led_modes(self, modes):
         self.led_modes = modes
+        self.linked_peers = {}
+        for name, setting in modes.items():
+            _, peers = self._parse_led_mode(setting)
+            for peer in peers:
+                canonical = self.led_name_alias.get(peer.lower())
+                if canonical in self.led_name_to_button_index and name != canonical:
+                    self.linked_peers.setdefault(name, set()).add(canonical)
+                    self.linked_peers.setdefault(canonical, set()).add(name)
 
     def get_button_state(self, button_index):
         if self.raw_control_data is None:
@@ -455,10 +468,25 @@ class SBCDriver:
             self._flash_on = not self._flash_on
             self._last_flash_toggle = now
 
+        def down(name):
+            return self.get_button_state(self.button_name_to_index[name])
+
+        power_levels = self.ship_power.sample(
+            now, down, lambda name: self.button_changed(self.button_name_to_index[name]) and down(name),
+            all(down(name) for name in self.shutdown_buttons),
+            self.FLASH_PERIOD_S, self.MAX_LIGHT_INTENSITY,
+        )
         for button_index, led_name in self.button_to_led_name.items():
             led_id = self.led_name_to_id[led_name]
             mode_raw = self.led_modes.get(led_name, led_mode)
-            mode, latched_peers = self._parse_led_mode(mode_raw)
+            mode, _ = self._parse_led_mode(mode_raw)
+
+            if led_name in power_levels:
+                intensity = power_levels[led_name]
+                if self.led_state.get(led_id, 0) != intensity:
+                    self.set_led(led_id, intensity, send=False)
+                    dirty = True
+                continue
 
             confirmation = self.hold_confirmations.get(led_name)
             if confirmation is not None:
@@ -472,45 +500,16 @@ class SBCDriver:
                     dirty = True
                 continue
 
-            if mode == "toggle":
+            if mode in ("toggle", "latched"):
                 if self.button_changed(button_index) and self.get_button_state(button_index):
-                    new_intensity = (
-                        self.MIN_LIGHT_INTENSITY
-                        if self.led_state.get(led_id, 0) > 0
-                        else self.MAX_LIGHT_INTENSITY
-                    )
+                    new_intensity = 0 if self.led_state.get(led_id, 0) else self.MAX_LIGHT_INTENSITY
                     self.set_led(led_id, new_intensity, send=False)
                     dirty = True
-                continue
-
-            if mode == "latched":
-                if self.button_changed(button_index) and self.get_button_state(button_index):
-                    new_intensity = (
-                        self.MIN_LIGHT_INTENSITY
-                        if self.led_state.get(led_id, 0) > 0
-                        else self.MAX_LIGHT_INTENSITY
-                    )
-                    self.set_led(led_id, new_intensity, send=False)
-                    dirty = True
-                    if new_intensity == self.MAX_LIGHT_INTENSITY:
-                        for peer_name in latched_peers:
-                            peer_key = self.led_name_alias.get(peer_name.lower(), peer_name)
-                            peer_id = self.led_name_to_id.get(peer_key)
-                            if peer_id is None:
-                                continue
-                            if self.led_state.get(peer_id, 0) > 0:
-                                self.set_led(peer_id, self.MIN_LIGHT_INTENSITY, send=False)
-                                dirty = True
-
-                for peer_name in latched_peers:
-                    peer_key = self.led_name_alias.get(peer_name.lower(), peer_name)
-                    peer_button = self.led_name_to_button_index.get(peer_key)
-                    if peer_button is None:
-                        continue
-                    if self.button_changed(peer_button) and self.get_button_state(peer_button):
-                        if self.led_state.get(led_id, 0) > 0:
-                            self.set_led(led_id, self.MIN_LIGHT_INTENSITY, send=False)
-                            dirty = True
+                    if new_intensity:
+                        for peer in self.linked_peers.get(led_name, ()):
+                            peer_id = self.led_name_to_id[peer]
+                            if self.led_state.get(peer_id, 0):
+                                self.set_led(peer_id, 0, send=False)
                 continue
 
             if mode == "momentary":
@@ -558,7 +557,9 @@ class SBCDriver:
             led_id = self.led_name_to_id.get(led_name)
             led_on = self.led_state.get(led_id, 0) > 0 if led_id is not None else False
 
-            if mode in ("toggle", "latched"):
+            if name in POWER_CONTROLS:
+                self.logical_state[name] = self.ship_power.enabled(name)
+            elif mode in ("toggle", "latched"):
                 self.logical_state[name] = led_on
             elif mode in ("flash", "breathe", "momentary"):
                 self.logical_state[name] = physical
@@ -658,7 +659,7 @@ class SBCDriver:
             self._flash_on = not self._flash_on
             self._last_flash_toggle = now
 
-    def _wait_for_button(self, button_name, led_name):
+    def _wait_for_button(self, button_name, led_name, require_toggles=False):
         """Startup helper: block until required button is pressed."""
         button_index = self.button_name_to_index[button_name]
         led_id = self.led_name_to_id[led_name]
@@ -676,6 +677,11 @@ class SBCDriver:
                 self.set_led(led_id, intensity, send=False)
                 self.write_leds()
 
+            if require_toggles and not all(
+                self.get_button_state(self.button_name_to_index[name]) for name in PREFLIGHT_SWITCHES
+            ):
+                self._wait_for_toggles_on()
+                continue
             if self.button_changed(button_index) and self.get_button_state(button_index):
                 self.set_led(led_id, self.MAX_LIGHT_INTENSITY, send=True)
                 return
@@ -684,13 +690,7 @@ class SBCDriver:
 
     def _wait_for_toggles_on(self):
         """Startup helper: block until all subsystem toggles are ON."""
-        toggle_names = [
-            "ToggleFilterControl",
-            "ToggleOxygenSupply",
-            "ToggleFuelFlowRate",
-            "ToggleBufferMaterial",
-            "ToggleVTLocation",
-        ]
+        toggle_names = list(PREFLIGHT_SWITCHES)
         toggle_indices = [self.button_name_to_index[name] for name in toggle_names]
         toggle_leds = {
             "ToggleFilterControl": "Comm1",
@@ -735,12 +735,18 @@ class SBCDriver:
         self._run_boot_diagnostics()
         self._wait_for_button("CockpitHatch", "CockpitHatch")
         self._wait_for_toggles_on()
-        self._wait_for_button("Ignition", "Ignition")
+        self._wait_for_button("Ignition", "Ignition", require_toggles=True)
+        self.ship_power.boot_ignition()
         self._wait_for_button("Start", "Start")
+        self.ship_power.boot_start()
         if self.ui is not None:
             self.ui.update_boot(stage="Power", message="Power-up sequence")
             self.ui.render(self.parse_raw_state(self.read_raw()))
         self.demo_led_sequence()
+        for name in POWER_CONTROLS:
+            self.set_led(self.led_name_to_id[name], self.MAX_LIGHT_INTENSITY, send=False)
+        self.write_leds()
+        self.update_logical_states("toggle")
         if self.ui is not None:
             self.ui.set_boot_mode(False)
 

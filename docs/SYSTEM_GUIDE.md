@@ -270,8 +270,8 @@ powershell -ExecutionPolicy Bypass -File services/start_process_services.ps1
 
 ### Auxiliary control surfaces
 
-In the Python read runtime, **VT Location** enables the Microsoft Game Voice
-(`045e:003b`) and **Buffer Material** enables the Nostromo n52
+In the Python read runtime, **Start** enables the Microsoft Game Voice
+(`045e:003b`) and **Ignition** enables the Nostromo n52
 (`050d:0815`). The runtime grabs their evdev nodes, including the n52 keypad
 and wheel, so auxiliary input stays inside the controller runtime. The running
 user needs permission to read and grab those input nodes. The SBC and the
@@ -279,10 +279,8 @@ auxiliary devices can start independently, and reconnects are detected during
 normal operation.
 
 The active profile's `aux_surface_switches` maps `game_voice` and
-`nostromo_n52` to SBC switch names. Set a mapping to JSON `null` to leave the
-surface disengaged and free that SBC switch for `control_macros`. Set a
-different switch name to remap the gate. The default profile assigns these
-switches to gating and leaves their ordinary key macros unassigned.
+`nostromo_n52` to SBC control names. Set a mapping to JSON `null` to leave the
+surface disengaged, or select a physical toggle switch to remap its gate.
 
 Enabled input is available as `aux_input` events on the existing event sinks,
 including `sbc/events/aux_input` when MQTT is enabled with its default topic
@@ -323,6 +321,8 @@ and activates the visible target on release. The Pi user needs permission to
 read and grab the touchscreen node. SDL finger events are also supported when
 SDL provides them.
 
+By default, Ignition enables the Nostromo N52 and Start enables GameVoice.
+The gates follow the committed power state through LED animations.
 In **Settings → Auxiliary controls**, use **Switches**, **Nostromo N52**,
 or **GameVoice**. Use
 **Next** and **Previous** to browse the bindings and tap a row to cycle its
@@ -366,3 +366,29 @@ early release, and on confirmation gives three fast flashes followed by two
 flash periods solid and then off. The configured action starts with the
 confirmation sequence. Set a named macro or `KEY_*` action in Button setup
 to enable host output. A zero confirmation duration restores normal dispatch.
+
+#### Button presets and ship power
+
+**Button setup** offers Momentary (lit while pressed), Latched Toggle (press
+to switch on or off), Momentary Flash (blinks while pressed), Mutually
+Exclusive Group (one active member), Selective Interlock (the selected
+control excludes all listed peers, which can coexist with one another),
+and Hold to Confirm (defaults to 1200 ms with blink, abort fade, and
+confirmation flashes). Enter LED names separated by commas for linked
+presets. For example, Selective Interlock on F1 with F2 and F3 allows F2
+and F3 together. Presets do not supply a game binding. Tank Detach is an
+example of Hold to Confirm and can be assigned the command of your choice.
+
+Startup walks through cockpit, switch, ignition, and drive checks. After
+startup, hold Ignition to enter Standby and stop the drives. With all
+five switches on, hold Ignition again to turn it Off. A short press from
+Off or Standby restores it to On once the switch checklist passes. With
+Ignition On, tap Start to engage the drives and hold Start to disengage.
+A short press of either active control shows abort feedback and keeps its
+power state. The MFD describes any blocked operation. Physical LEDs
+settle to the current power state after feedback.
+
+A configured Ignition or Start action fires on a committed transition.
+Stopping the drives by moving Ignition to Standby also invokes the
+configured Start action. The built-in states gate inputs locally and
+publish vessel state. Bind or route game-specific actions separately.
