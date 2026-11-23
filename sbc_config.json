@@ -149,7 +149,16 @@
         "game_voice": "ToggleVTLocation",
         "nostromo_n52": "ToggleBufferMaterial"
       },
-      "aux_key_macros": {},
+      "aux_key_macros": {
+        "nostromo_n52": {
+          "KEY_Q": "ELITE_CARGO_SCOOP",
+          "KEY_E": "ELITE_SHIP_LIGHTS",
+          "KEY_R": "ELITE_LANDING_GEAR",
+          "KEY_F": "ELITE_HARDPOINTS",
+          "KEY_A": "ELITE_TARGET_AHEAD",
+          "KEY_Z": "ELITE_HYPERSPACE"
+        }
+      },
       "control_macros": {
         "Eject": { "action": "ELITE_ABORT", "behavior": "from_led" },
         "CockpitHatch": { "action": "ELITE_LANDING_GEAR", "behavior": "from_led" },
@@ -168,6 +177,8 @@
             "else": [ { "tts_say": { "text": "Welcome, pilot." } } ]
           }
         ],
+        "ELITE_CARGO_SCOOP": { "keys": ["KEY_F16"], "press_ms": 40, "release_ms": 40 },
+        "ELITE_SHIP_LIGHTS": { "keys": ["KEY_F17"], "press_ms": 40, "release_ms": 40 },
         "ELITE_ABORT": { "keys": ["KEY_LEFTCTRL", "KEY_F"], "press_ms": 40, "release_ms": 40 },
         "ELITE_LANDING_GEAR": { "keys": ["KEY_L"], "press_ms": 40, "release_ms": 40 },
         "ELITE_HARDPOINTS": { "keys": ["KEY_U"], "press_ms": 40, "release_ms": 40 },

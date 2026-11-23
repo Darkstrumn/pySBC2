@@ -23,13 +23,13 @@ def init_ui(ui_mode, sbc, config_view, config_root, config_path, reload_callback
         except Exception:
             return None
         try:
-            return PygameMFD(sbc)
+            return PygameMFD(sbc, config_view, config_root, config_path, reload_callback)
         except Exception:
             return None
     if ui_mode == "auto":
         try:
             from ui_pygame import PygameMFD
-            return PygameMFD(sbc)
+            return PygameMFD(sbc, config_view, config_root, config_path, reload_callback)
         except Exception:
             try:
                 return ConsoleMFD(sbc, config_view, config_root, config_path, reload_callback=reload_callback)

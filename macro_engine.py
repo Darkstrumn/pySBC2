@@ -78,6 +78,8 @@ class MacroEngine:
         """Collect all key codes referenced by key-based macros for uinput setup."""
         keys = set()
         for macro in self.macros.values():
+            if not isinstance(macro, dict):
+                continue
             for key in macro.get("keys", []):
                 code = getattr(self.ecodes, key, None)
                 if code is not None:
