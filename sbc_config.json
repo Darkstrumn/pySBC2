@@ -217,14 +217,14 @@
         ]
       },
       "analog": {
-        "aim_x": { "center": 512, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": -512, "max": 511, "calibration_samples": 20 },
-        "aim_y": { "center": 512, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": -512, "max": 511, "calibration_samples": 20 },
-        "rotation": { "center": 0, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": -512, "max": 511, "calibration_samples": 20 },
-        "sight_x": { "center": 0, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": -512, "max": 511, "calibration_samples": 20 },
-        "sight_y": { "center": 0, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": -512, "max": 511, "calibration_samples": 20 },
-        "left_pedal": { "center": 0, "deadzone": 0, "deadzone_mode": "low", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": 0, "max": 1023, "calibration_samples": 20 },
-        "middle_pedal": { "center": 0, "deadzone": 150, "deadzone_mode": "low", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": 0, "max": 1023, "calibration_samples": 20 },
-        "right_pedal": { "center": 0, "deadzone": 0, "deadzone_mode": "low", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "smoothing_samples": 2, "min": 0, "max": 1023, "calibration_samples": 20 }
+        "aim_x": { "center": 512, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "adaptive_jitter": true, "jitter_min": 3, "jitter_max": 18, "min": -512, "max": 511, "calibration_samples": 20 },
+        "aim_y": { "center": 512, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "adaptive_jitter": true, "jitter_min": 3, "jitter_max": 18, "min": -512, "max": 511, "calibration_samples": 20 },
+        "rotation": { "center": 0, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "adaptive_jitter": true, "jitter_min": 3, "jitter_max": 18, "min": -512, "max": 511, "calibration_samples": 20 },
+        "sight_x": { "center": 0, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "adaptive_jitter": true, "jitter_min": 3, "jitter_max": 18, "min": -512, "max": 511, "calibration_samples": 20 },
+        "sight_y": { "center": 0, "deadzone": 0, "deadzone_mode": "center", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "adaptive_jitter": true, "jitter_min": 3, "jitter_max": 18, "min": -512, "max": 511, "calibration_samples": 20 },
+        "left_pedal": { "center": 0, "deadzone": 0, "deadzone_mode": "low", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "adaptive_jitter": true, "jitter_min": 3, "jitter_max": 18, "min": 0, "max": 1023, "calibration_samples": 20 },
+        "middle_pedal": { "center": 0, "deadzone": 150, "deadzone_mode": "low", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "adaptive_jitter": true, "jitter_min": 3, "jitter_max": 18, "min": 0, "max": 1023, "calibration_samples": 20 },
+        "right_pedal": { "center": 0, "deadzone": 0, "deadzone_mode": "low", "deadzone_margin_abs": 5, "deadzone_margin_mult": 1.2, "adaptive_jitter": true, "jitter_min": 3, "jitter_max": 18, "min": 0, "max": 1023, "calibration_samples": 20 }
       },
       "gear_zones": [
         { "value": -2, "action": "ELITE_THROTTLE_0", "behavior": "tap" },

@@ -5,6 +5,8 @@ import usb.core
 import usb.util
 from collections import deque
 
+from analog_jitter import AdaptiveJitter
+
 """
 Hardware driver and controller-state adapter for the Steel Battalion Controller.
 
@@ -144,6 +146,7 @@ class SBCDriver:
         self.led_modes = {}
         self.analog_config = {}
         self.analog_samples = {}
+        self.analog_jitter = {}
         self.logical_state = {}
         self.last_values = {}
         self.button_names = [
@@ -301,13 +304,18 @@ class SBCDriver:
         }
 
     def set_analog_config(self, config):
-        """Install analog post-processing config and smoothing ring buffers."""
+        """Install analog processing settings and reset per-axis filter state."""
         self.analog_config = config
+        self.analog_samples.clear()
+        self.analog_jitter.clear()
         for name, axis_cfg in config.items():
-            samples = int(axis_cfg.get("smoothing_samples", 1))
-            if samples < 1:
-                samples = 1
-            self.analog_samples[name] = deque(maxlen=samples)
+            if axis_cfg.get("adaptive_jitter", False):
+                self.analog_jitter[name] = AdaptiveJitter(
+                    axis_cfg.get("jitter_min", 3), axis_cfg.get("jitter_max", 18)
+                )
+            else:
+                samples = max(1, int(axis_cfg.get("smoothing_samples", 1)))
+                self.analog_samples[name] = deque(maxlen=samples)
 
     def apply_analog_processing(self, state):
         """Apply trim, clamping, smoothing, and deadzone logic to analog channels."""
@@ -333,12 +341,11 @@ class SBCDriver:
             if maximum is not None and value > maximum:
                 value = maximum
 
-            samples = self.analog_samples.get(axis_name)
-            if samples is None:
-                samples = deque(maxlen=max(int(axis_cfg.get("smoothing_samples", 1)), 1))
-                self.analog_samples[axis_name] = samples
-            samples.append(value)
-            value = int(sum(samples) / len(samples))
+            jitter = self.analog_jitter.get(axis_name)
+            if jitter is None:
+                samples = self.analog_samples[axis_name]
+                samples.append(value)
+                value = int(sum(samples) / len(samples))
 
             if deadzone_mode == "center":
                 if abs(value) <= deadzone:
@@ -347,6 +354,8 @@ class SBCDriver:
                 if value <= deadzone:
                     value = 0
 
+            if jitter is not None:
+                value = jitter.update(value, minimum, maximum)
             state[axis_name] = value
 
         return state
