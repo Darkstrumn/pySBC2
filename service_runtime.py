@@ -2,6 +2,7 @@ import json
 import threading
 import time
 from collections import deque
+from queue import Empty, Full, Queue
 from pathlib import Path
 
 from gear_effects import GearEffectController
@@ -21,17 +22,53 @@ This module decomposes the old monolithic read loop into explicit services:
 
 
 class EventSinkFanout:
-    """Fan out publish(payload) calls to multiple event sinks."""
+    """Deliver events inline during setup and off the USB polling loop in read mode."""
 
     def __init__(self, sinks=None):
         self._sinks = list(sinks or [])
+        self._pending = Queue(maxsize=256)
+        self._closing = threading.Event()
+        self._thread = None
+        self.dropped_events = 0
 
     def add(self, sink):
-        if sink is None:
-            return
-        self._sinks.append(sink)
+        if sink is not None:
+            self._sinks.append(sink)
+
+    def start(self):
+        self._thread = threading.Thread(
+            target=self._deliver_pending, name="sbc-events", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self):
+        if self._thread is not None:
+            self._closing.set()
+            self._thread.join(timeout=1.0)
+            return not self._thread.is_alive()
+        return True
 
     def publish(self, payload):
+        if self._thread is None:
+            self._deliver(payload)
+            return
+        if self._closing.is_set():
+            return
+        try:
+            self._pending.put_nowait(payload)
+        except Full:
+            # A stalled observer must never delay the next USB report.
+            self.dropped_events += 1
+
+    def _deliver_pending(self):
+        while not self._closing.is_set() or not self._pending.empty():
+            try:
+                payload = self._pending.get(timeout=0.05)
+            except Empty:
+                continue
+            self._deliver(payload)
+
+    def _deliver(self, payload):
         for sink in list(self._sinks):
             try:
                 sink.publish(payload)

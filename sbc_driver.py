@@ -253,10 +253,14 @@ class SBCDriver:
         mask = 1 << (button_index % 8)
         return (buf[byte_pos] & mask) != 0
 
-    def parse_state(self, buf):
-        """Decode packet and update `last_values` cache used by macro expressions."""
+    def update_button_report(self, buf):
+        """Keep consecutive reports for button edge detection."""
         self.prev_control_data = self.raw_control_data
         self.raw_control_data = bytearray(buf)
+
+    def parse_state(self, buf):
+        """Decode packet and update `last_values` cache used by macro expressions."""
+        self.update_button_report(buf)
         raw_state = self.parse_raw_state(buf)
         state = self.apply_analog_processing(raw_state)
         self.last_values = {
