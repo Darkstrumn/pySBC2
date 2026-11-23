@@ -12,6 +12,7 @@ High-level flow:
 import sys
 import time
 
+from aux_input import AuxInput
 from calibration import calibrate_axes
 from config_loader import build_default_led_modes, load_config
 from input_matrix import InputMatrix
@@ -117,6 +118,7 @@ def main():
     macro_engine = None
     vessel_model = None
     ui = None
+    aux_input = None
     touch = None
     event_server = None
     mqtt_bridge = None
@@ -148,6 +150,8 @@ def main():
             macro_engine.reload_config(effective)
         if vessel_model is not None:
             vessel_model.reload_config(effective)
+        if aux_input is not None:
+            aux_input.reload(effective)
         if ui is not None:
             ui.config_root = config
             ui.config_view = effective
@@ -224,7 +228,9 @@ def main():
             return
 
         if mode == "read":
+            aux_input = AuxInput(sbc, effective, event_sink, macro_engine.run_macro)
             sbc.startup_sequence()
+            aux_input.poll(time.monotonic(), active=False)
             vessel_model.on_boot_complete()
             macro_engine.run_macro(effective.get("powerup_macro", ""))
             macro_engine.cooperative_timing = True
@@ -242,6 +248,7 @@ def main():
                 event_sink=event_sink,
                 bus=bus,
                 runtime=runtime,
+                aux_input=aux_input,
             )
             audit_sink.log("runtime_started", {"mode": "read", "runtime": "services_v1"}, service="runtime")
             event_sink.start()
@@ -250,6 +257,8 @@ def main():
             sbc.graceful_shutdown()
             return
     finally:
+        if aux_input is not None:
+            aux_input.close()
         events_drained = event_sink.stop()
         if not events_drained or event_sink.dropped_events:
             print(
