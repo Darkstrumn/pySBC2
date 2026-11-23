@@ -209,6 +209,7 @@ def main():
             sbc.startup_sequence()
             vessel_model.on_boot_complete()
             macro_engine.run_macro(effective.get("powerup_macro", ""))
+            macro_engine.cooperative_timing = True
 
             runtime = ServiceRuntime([], audit_sink=audit_sink)
             runtime.services = build_services(

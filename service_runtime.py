@@ -136,10 +136,13 @@ class ReaderService(PollingService):
         self.bus = bus
         self.audit_sink = audit_sink
         self.latest_state = None
+        self.sample_handlers = ()
 
     def tick(self, now_s):
         buf = self.sbc.read_raw()
         self.latest_state = self.sbc.parse_state(buf)
+        for handle_sample in self.sample_handlers:
+            handle_sample(self.latest_state)
         if self.bus is not None:
             self.bus.publish("reader.state", self.latest_state)
         if self.audit_sink is not None:
@@ -375,13 +378,15 @@ class WriterService(PollingService):
         if dirty:
             self.sbc.write_leds()
 
+    def handle_sample(self, state):
+        self.sbc.handle_button_leds(self.led_mode)
+        self.sbc.update_logical_states(self.led_mode)
+
     def tick(self, now_s):
         state = self.state_provider()
         if state is None:
             return
         self._process_pending_commands(now_s)
-        self.sbc.handle_button_leds(self.led_mode)
-        self.sbc.update_logical_states(self.led_mode)
         if self.sbc.update_gear_lights:
             self.gear_effects.update(state.get("gear"))
         self.macro_engine.tick()
@@ -399,9 +404,7 @@ class ModelService(PollingService):
         self.snapshot_interval_s = max(0.0, float(snapshot_interval_ms) / 1000.0)
         self._next_snapshot_s = 0.0
 
-    def tick(self, now_s):
-        if self.sbc.raw_control_data is None:
-            return
+    def handle_sample(self, state):
         for control_name, index in self.sbc.button_name_to_index.items():
             if self.sbc.button_changed(index):
                 self.vessel_model.on_control_change(
@@ -409,6 +412,10 @@ class ModelService(PollingService):
                     self.sbc.get_button_state(index),
                     logical_state=self.sbc.get_logical_state(control_name),
                 )
+
+    def tick(self, now_s):
+        if self.sbc.raw_control_data is None:
+            return
         self.vessel_model.tick()
         if self.event_sink is not None and now_s >= self._next_snapshot_s:
             self.event_sink.publish(
@@ -431,12 +438,14 @@ class MacroDispatchService(PollingService):
         self.state_provider = state_provider
         self.event_sink = event_sink
 
+    def handle_sample(self, state):
+        self.macro_engine.handle_layer_cycle()
+        self.macro_engine.handle_buttons(state, self.led_mode)
+
     def tick(self, now_s):
         state = self.state_provider()
         if state is None:
             return
-        self.macro_engine.handle_layer_cycle()
-        self.macro_engine.handle_buttons(state, self.led_mode)
         self.macro_engine.handle_analogs(state)
         self.macro_engine.handle_gears(state)
 
@@ -649,6 +658,13 @@ def build_services(
         state_provider=state_provider,
         interval_ms=telemetry_ms,
         event_sink=event_sink,
+    )
+
+    # Edge consumers must observe each report before the next read replaces it.
+    reader_service.sample_handlers = (
+        writer_service.handle_sample,
+        model_service.handle_sample,
+        macro_service.handle_sample,
     )
 
     service_list = [
