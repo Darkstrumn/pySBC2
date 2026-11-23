@@ -184,7 +184,7 @@ def main():
         vessel_model = build_vessel_model(effective, input_matrix=input_matrix, event_sink=event_sink)
         CommandRouter(bus, input_matrix, event_sink=event_sink)
 
-        if ui_mode != "web" and (effective.get("touch_device") or hasattr(ui, "aux_key_bindings")):
+        if effective.get("touch_device") or hasattr(ui, "aux_key_bindings"):
             screen = getattr(ui, "screen", None)
             width, height = (
                 screen.get_size() if hasattr(screen, "get_size")

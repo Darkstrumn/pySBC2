@@ -310,10 +310,8 @@ Match the host keys to your Elite bindings. In the default `macro_output: log`
 mode, macro key events are available through the existing event sinks. A host
 subscriber must turn them into host key input when Elite runs on another machine.
 
-Use `python3 sbc-driver-test1.py --ui=pygame` on the Pi display. Tap **Main** or
-**Settings** in the top bar. In Settings, tap a switch assignment to cycle its
-options, then tap **Save & Apply**. Tap any of the six N52 bindings to cycle the profile macros before saving. For SDL-managed touch, leave `touch_device` empty. If you configure an
-evdev touchscreen, its absolute coordinates are scaled to the Pygame window.
+Use `python3 sbc-driver-test1.py --ui=pygame` on the Pi display. Tap **Settings**
+then **Auxiliary controls** to edit the switch assignments and key bindings.
 
 Layout references: [Belkin n52 manual](https://cache-www.belkin.com/support/dl/f8gpc100_man.pdf), [Steel Battalion in Elite](https://www.reddit.com/r/EliteDangerous/comments/g11em9), and [ITBSBC](https://github.com/kgmonteith/ITBSBC). The Elite action choices above are project defaults.
 
@@ -325,7 +323,8 @@ and activates the visible target on release. The Pi user needs permission to
 read and grab the touchscreen node. SDL finger events are also supported when
 SDL provides them.
 
-In **Settings**, use **Switches**, **Nostromo N52**, or **GameVoice**. Use
+In **Settings → Auxiliary controls**, use **Switches**, **Nostromo N52**,
+or **GameVoice**. Use
 **Next** and **Previous** to browse the bindings and tap a row to cycle its
 macro. The N52 includes the wheel click and both scroll directions. Each scroll
 event can invoke one macro for its direction. GameVoice lists the buttons
@@ -335,17 +334,28 @@ suppresses that fallback. Tap **Save & Apply** to persist the profile edits.
 
 ### HTML MFD and hold-to-confirm buttons
 
-Start the test app with `python3 sbc-driver-test1.py --ui=web` and open
-`http://127.0.0.1:8766/` in a browser. The controller can serve the panel
-from its console session. Showing it on the Pi touchscreen requires a
-browser running on the Pi's display. To test from a workstation, forward
-port 8766 over SSH and open the same loopback address on that workstation.
+Run the Pygame MFD from the Pi's physical console with the framebuffer
+settings that worked in the SDL 1.2 display test. For an SDL build that
+provides the `fbcon` driver, use:
 
-Edit `mfd/index.html`, `mfd/panel.css`, and `mfd/panel.js` to change the
-browser presentation. The Main screen reads LED brightness separately from
-physical held state. Settings opens Diagnostics, button configuration, a
-macro JSON editor, and theme/profile selection after startup. Restart the
-runtime if a profile changes startup-only settings such as the output backend.
+```sh
+SDL_VIDEODRIVER=fbcon SDL_FBDEV=/dev/fb0 python3 sbc-driver-test1.py --ui=pygame
+```
+
+Edit `mfd/panel.html` and restart the app to update the screen layout. Pygame
+draws the panel directly on its SDL display. The layout uses well-formed HTML
+with `header` and `section id` pages, `div data-rect="x,y,w,h"` panels,
+`span data-pos="x,y"` labels, and `button data-rect data-action` touch
+targets. Labels can bind to runtime values through `data-value`. Dynamic
+widgets and page actions are registered in Python. The renderer supports
+this subset of HTML, with styles defined by the Pygame theme.
+
+Main shows live LED brightness and marks physically held buttons and active
+switches. The old dashboard is under **Settings → Diagnostics**. Settings also
+opens button setup, a macro JSON editor with a touch keyboard, themes and
+profiles, About, and Help. About shows the local Git tag or revision when
+available, runtime versions, display driver, and touch input source. Restart
+the runtime if a profile changes startup-only settings such as the output backend.
 
 The Elite and Horizons starter profiles copy the bundled Elite mappings.
 Star Citizen, EVE Online, MechWarrior, OBS, and Kerbal Space Program starters

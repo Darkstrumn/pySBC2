@@ -1,0 +1,53 @@
+<main>
+  <header>
+    <span data-pos="20,22" data-style="title">SBC MFD</span>
+    <button data-rect="490,10,135,48" data-action="main">Main</button>
+    <button data-rect="638,10,146,48" data-action="settings">Settings</button>
+  </header>
+  <section id="main">
+    <div data-rect="16,70,768,68">
+      <span data-pos="28,79" data-style="accent" data-value="theme" />
+      <span data-pos="28,105" data-value="profile" />
+      <span data-pos="380,79" data-value="flight" />
+      <span data-pos="380,105" data-value="confirmation" />
+    </div>
+    <div data-rect="16,148,768,289" data-widget="indicators">
+      <span data-pos="28,157" data-style="accent">CONTROL STATUS</span>
+      <span data-pos="380,157" data-style="dim">Light: LED / underline: held or switch on</span>
+    </div>
+  </section>
+  <section id="settings">
+    <span data-pos="22,77" data-style="title">Settings</span>
+    <button data-rect="22,122,363,53" data-action="profiles">Themes &amp; profiles</button>
+    <button data-rect="411,122,363,53" data-action="buttons">Button setup</button>
+    <button data-rect="22,190,363,53" data-action="macros">Macro editor</button>
+    <button data-rect="411,190,363,53" data-action="auxiliary">Auxiliary controls</button>
+    <button data-rect="22,258,363,53" data-action="diagnostics">Diagnostics</button>
+    <button data-rect="411,258,363,53" data-action="about">About</button>
+    <button data-rect="22,326,363,53" data-action="help">Help</button>
+  </section>
+  <section id="settings-back">
+    <button data-rect="354,10,122,48" data-action="settings">Back</button>
+  </section>
+  <section id="about">
+    <span data-pos="22,78" data-style="title">About pySBC2</span>
+    <span data-pos="22,125" data-value="build" />
+    <span data-pos="22,155" data-value="runtime" />
+    <span data-pos="22,185" data-value="display" />
+    <span data-pos="22,215" data-value="touch" />
+    <span data-pos="22,245" data-value="usb" />
+    <span data-pos="22,295">Steel Battalion Controller, GameVoice and Nostromo N52</span>
+    <span data-pos="22,325">LED feedback, hold confirmation, profiles and key macros</span>
+    <button data-rect="22,375,170,50" data-action="help">Help</button>
+  </section>
+  <section id="help">
+    <span data-pos="22,78" data-style="title">Using the controller</span>
+    <span data-pos="22,130">Main shows LED brightness. Underlines show held buttons and active switches.</span>
+    <span data-pos="22,170">Settings → Button setup sets an LED mode, action and optional hold duration.</span>
+    <span data-pos="22,210">Hold Tank Detach until the confirmation flashes. Release early to cancel.</span>
+    <span data-pos="22,250">Use Macro editor to create an action, then assign it in Button setup.</span>
+    <span data-pos="22,290">Auxiliary controls configures the GameVoice and Nostromo N52 switches and keys.</span>
+    <span data-pos="22,330">Diagnostics shows live input. Themes &amp; profiles changes the active configuration.</span>
+    <span data-pos="22,381" data-style="dim">Repository documentation: docs/SYSTEM_GUIDE.md</span>
+  </section>
+</main>
