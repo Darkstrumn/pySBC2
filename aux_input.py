@@ -10,10 +10,11 @@ SURFACE_IDS = {"game_voice": (0x045E, 0x003B), "nostromo_n52": (0x050D, 0x0815)}
 class AuxInput:
     """Capture auxiliary input and publish it only while its profile gate is on."""
 
-    def __init__(self, sbc, config, event_sink, run_macro):
+    def __init__(self, sbc, config, event_sink, run_macro, key_feedback=None):
         self.sbc = sbc
         self.event_sink = event_sink
         self.run_macro = run_macro
+        self.key_feedback = key_feedback
         self.devices = {}
         self.next_scan = 0.0
         self.reload(config)
@@ -58,9 +59,24 @@ class AuxInput:
             "timestamp_ms": int(time.time() * 1000),
         })
 
+    def _key(self, surface, code, pressed):
+        self._publish(surface, "key", code, int(pressed))
+        names = self.evdev.ecodes.bytype[self.evdev.ecodes.EV_KEY]
+        name = names.get(code, str(code))
+        aliases = name if isinstance(name, (list, tuple)) else (name,)
+        bindings = self.macros.get(surface, {})
+        action = bindings.get(str(code))
+        for alias in aliases:
+            action = action or bindings.get(alias)
+        action = action or bindings.get("*")
+        if self.key_feedback is not None:
+            self.key_feedback(surface, code, aliases[0], pressed, action)
+        if pressed and action:
+            self.run_macro(action)
+
     def _release(self, surface, pressed):
         for code in sorted(pressed):
-            self._publish(surface, "key", code, 0)
+            self._key(surface, code, False)
         pressed.clear()
 
     def poll(self, now_s, active=True):
@@ -86,18 +102,10 @@ class AuxInput:
                     if event.type == ecodes.EV_KEY:
                         if event.value == 1 and event.code not in pressed:
                             pressed.add(event.code)
-                            self._publish(surface, "key", event.code, 1)
-                            bindings = self.macros.get(surface, {})
-                            names = ecodes.bytype[ecodes.EV_KEY]
-                            name = names.get(event.code)
-                            action = bindings.get(str(event.code))
-                            for alias in name if isinstance(name, list) else (name,):
-                                action = action or bindings.get(alias)
-                            if action:
-                                self.run_macro(action)
+                            self._key(surface, event.code, True)
                         elif event.value == 0 and event.code in pressed:
                             pressed.remove(event.code)
-                            self._publish(surface, "key", event.code, 0)
+                            self._key(surface, event.code, False)
                     elif event.type == ecodes.EV_REL:
                         self._publish(surface, "relative", event.code, event.value)
             except OSError:

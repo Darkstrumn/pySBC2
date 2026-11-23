@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -43,6 +44,9 @@ class PygameMFD:
         self.text = (220, 230, 240)
         self.dim = (130, 140, 150)
         self.status_message = ""
+        self.aux_held = {}
+        self.aux_released = ""
+        self.aux_release_until = 0.0
         self.boot_mode = False
         self.boot_stage = ""
         self.boot_message = ""
@@ -75,6 +79,25 @@ class PygameMFD:
     def set_status(self, message):
         """Set transient status message."""
         self.status_message = message
+
+    def set_aux_key(self, surface, code, name, pressed, action):
+        """Display the physical key state independently of the timed macro output."""
+        label = {"game_voice": "GameVoice", "nostromo_n52": "N52"}.get(surface, surface)
+        mapping = f"  /  {action}" if action else ""
+        identity = (surface, code)
+        if pressed:
+            self.aux_held[identity] = f"{label} {name} held{mapping}"
+        else:
+            self.aux_held.pop(identity, None)
+            self.aux_released = f"{label} {name} released{mapping}"
+            self.aux_release_until = time.monotonic() + 2.0
+
+    def _footer_status(self):
+        if self.aux_held:
+            return list(self.aux_held.values())[-1]
+        if time.monotonic() < self.aux_release_until:
+            return self.aux_released
+        return self.status_message
 
     def set_layer(self, layer):
         """Expose active macro layer in UI."""
@@ -209,8 +232,9 @@ class PygameMFD:
             self._render_settings()
         else:
             self._render_main(state)
-        if self.status_message:
-            self._text(self.status_message, 22, 450, color=self.dim)
+        status = self._footer_status()
+        if status:
+            self._text(status, 22, 450, color=self.dim)
         pygame.display.flip()
 
     def handle_touch(self, x, y):

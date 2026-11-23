@@ -229,7 +229,10 @@ def main():
             return
 
         if mode == "read":
-            aux_input = AuxInput(sbc, effective, event_sink, macro_engine.run_macro)
+            aux_input = AuxInput(
+                sbc, effective, event_sink, macro_engine.run_macro,
+                key_feedback=getattr(ui, "set_aux_key", None),
+            )
             sbc.startup_sequence()
             aux_input.poll(time.monotonic(), active=False)
             vessel_model.on_boot_complete()

@@ -150,6 +150,7 @@
         "nostromo_n52": "ToggleBufferMaterial"
       },
       "aux_key_macros": {
+        "game_voice": { "*": "GAMEVOICE_INPUT_TEST" },
         "nostromo_n52": {
           "KEY_Q": "ELITE_CARGO_SCOOP",
           "KEY_E": "ELITE_SHIP_LIGHTS",
@@ -177,6 +178,7 @@
             "else": [ { "tts_say": { "text": "Welcome, pilot." } } ]
           }
         ],
+        "GAMEVOICE_INPUT_TEST": [{ "set_var": { "name": "game_voice_input_seen", "value": true } }],
         "ELITE_CARGO_SCOOP": { "keys": ["KEY_F16"], "press_ms": 40, "release_ms": 40 },
         "ELITE_SHIP_LIGHTS": { "keys": ["KEY_F17"], "press_ms": 40, "release_ms": 40 },
         "ELITE_ABORT": { "keys": ["KEY_LEFTCTRL", "KEY_F"], "press_ms": 40, "release_ms": 40 },
