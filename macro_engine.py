@@ -236,12 +236,11 @@ class MacroEngine:
         """Process configured control mappings from physical button edge state."""
         for control_name in self.control_macros.keys():
             index = self.sbc.button_name_to_index.get(control_name)
-            if index is None:
+            if index is None or not self.sbc.button_changed(index):
                 continue
 
             pressed = self.sbc.get_button_state(index)
-            changed = self.sbc.button_changed(index)
-            self.handle_button_event(control_name, pressed, changed, default_led_mode)
+            self.handle_button_event(control_name, pressed, True, default_led_mode)
 
     def handle_analogs(self, state):
         """Apply analog zone transitions and run enter/exit behavior macros."""

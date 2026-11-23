@@ -10,6 +10,7 @@ High-level flow:
 """
 
 import sys
+import time
 
 from calibration import calibrate_axes
 from config_loader import build_default_led_modes, load_config
@@ -32,7 +33,7 @@ from vessel_models import build_vessel_model
 
 
 def parse_args(argv):
-    """Parse CLI mode (`read|led|calibrate`) and requested UI backend."""
+    """Parse CLI mode (`read|led|calibrate|buttons`) and requested UI backend."""
     mode = "read"
     ui_mode = "console"
     args = argv[1:]
@@ -86,6 +87,19 @@ def build_effective_config(config):
     return effective
 
 
+def run_button_test(sbc, led_mode):
+    """Exercise the original read-to-button-LED loop in isolation."""
+    sbc.startup_sequence()
+    poll_interval_s = sbc.TIME_BETWEEN_POLLS_MS / 1000.0
+    while True:
+        sbc.update_button_report(sbc.read_raw())
+        sbc.handle_button_leds(led_mode)
+        if sbc.should_terminate():
+            sbc.graceful_shutdown()
+            return
+        time.sleep(poll_interval_s)
+
+
 def main():
     """Initialize runtime subsystems and execute selected operation mode."""
     mode, ui_mode = parse_args(sys.argv)
@@ -95,6 +109,10 @@ def main():
     sbc = SBCDriver()
     led_mode = apply_config(sbc, effective)
     sbc.open()
+
+    if mode == "buttons":
+        run_button_test(sbc, led_mode)
+        return
 
     macro_engine = None
     vessel_model = None
