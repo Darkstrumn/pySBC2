@@ -3,6 +3,7 @@
   "profiles": {
     "default": {
       "led_mode": "toggle",
+      "button_confirm_ms": { "TankDetach": 1200 },
       "led_modes": {
         "Eject": "flash",
         "CockpitHatch": "flash",

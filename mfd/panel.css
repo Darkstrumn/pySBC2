@@ -1,0 +1,43 @@
+:root {
+  color-scheme: dark;
+  --accent: #ffab54;
+  --panel: #211a16;
+  --line: #594024;
+  background: #100f11;
+  color: #f4e9df;
+  font: 15px system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0 auto; max-width: 1024px; }
+header, main, footer { padding: 12px 18px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); }
+h1, h2, h3 { color: var(--accent); margin: 0 0 8px; letter-spacing: .055em; }
+h1 { font-size: 21px; }
+h2 { font-size: 16px; }
+h3 { font-size: 14px; }
+nav { display: flex; gap: 8px; flex-wrap: wrap; }
+button, select, input, textarea {
+  color: inherit; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 3px; padding: 9px 12px; min-height: 44px; font: inherit;
+}
+button { cursor: pointer; touch-action: manipulation; }
+button[aria-current], button:focus-visible { border-color: var(--accent); color: var(--accent); }
+.instruments { display: flex; gap: 8px; margin-bottom: 12px; }
+.instruments div { background: var(--panel); border-top: 2px solid var(--accent); padding: 7px 14px; flex: 1; }
+strong { font-size: 20px; margin-left: 12px; }
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 5px; }
+.status-grid div { min-height: 29px; display: flex; align-items: center; gap: 6px; padding: 4px 6px; background: var(--panel); font-size: 12px; }
+.status-grid small { margin-left: auto; color: var(--accent); }
+.status-grid i { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; border: 1px solid var(--accent); }
+.status-grid [data-held="true"] { outline: 1px solid var(--line); color: var(--accent); }
+form { display: grid; gap: 8px; margin: 12px 0; max-width: 620px; }
+label { display: grid; gap: 4px; }
+.back { margin-bottom: 10px; }
+textarea { resize: vertical; font-family: monospace; }
+footer { color: var(--accent); }
+[data-theme="horizons"] { --accent: #e9bd71; --panel: #252018; }
+[data-theme="star_citizen"] { --accent: #6ed1cf; --panel: #142629; --line: #355f63; }
+[data-theme="eve"] { --accent: #99b8fc; --panel: #1a2133; --line: #3c4866; }
+[data-theme="mechwarrior"] { --accent: #b3d26e; --panel: #20271a; --line: #475833; }
+[data-theme="obs"] { --accent: #e3b6ff; --panel: #261d32; --line: #59436a; }
+[data-theme="kerbal"] { --accent: #cde493; --panel: #20301d; --line: #536e40; }

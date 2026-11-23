@@ -332,3 +332,27 @@ event can invoke one macro for its direction. GameVoice lists the buttons
 reported by the device when you open its tab. Its **Unmapped buttons** row
 controls the fallback macro, and a button explicitly set to **Unassigned**
 suppresses that fallback. Tap **Save & Apply** to persist the profile edits.
+
+### HTML MFD and hold-to-confirm buttons
+
+Start the test app with `python3 sbc-driver-test1.py --ui=web` and open
+`http://127.0.0.1:8766/` in a browser. The controller can serve the panel
+from its console session. Showing it on the Pi touchscreen requires a
+browser running on the Pi's display. To test from a workstation, forward
+port 8766 over SSH and open the same loopback address on that workstation.
+
+Edit `mfd/index.html`, `mfd/panel.css`, and `mfd/panel.js` to change the
+browser presentation. The Main screen reads LED brightness separately from
+physical held state. Settings opens Diagnostics, button configuration, a
+macro JSON editor, and theme/profile selection after startup. Restart the
+runtime if a profile changes startup-only settings such as the output backend.
+
+The Elite and Horizons starter profiles copy the bundled Elite mappings.
+Star Citizen, EVE Online, MechWarrior, OBS, and Kerbal Space Program starters
+copy the hardware settings and provide themed profiles ready for custom bindings.
+
+Tank Detach defaults to a 1200 ms hold. It flashes while held, fades on an
+early release, and on confirmation gives three fast flashes followed by two
+flash periods solid and then off. The configured action starts with the
+confirmation sequence. Set a named macro or `KEY_*` action in Button setup
+to enable host output. A zero confirmation duration restores normal dispatch.

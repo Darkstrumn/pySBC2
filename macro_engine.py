@@ -238,11 +238,29 @@ class MacroEngine:
         """Process configured control mappings from physical button edge state."""
         for control_name in self.control_macros.keys():
             index = self.sbc.button_name_to_index.get(control_name)
+            confirmation = getattr(self.sbc, "hold_confirmations", {}).get(control_name)
+            if confirmation is not None:
+                continue
             if index is None or not self.sbc.button_changed(index):
                 continue
 
             pressed = self.sbc.get_button_state(index)
             self.handle_button_event(control_name, pressed, True, default_led_mode)
+
+        for control_name, confirmation in getattr(self.sbc, "hold_confirmations", {}).items():
+            if confirmation.confirmed:
+                confirmation.confirmed = False
+                action, _, press_ms, release_ms = self._resolve_control_action(control_name)
+                self._schedule_action(self._confirmed_steps(confirmation, action, press_ms, release_ms))
+
+    def _confirmed_steps(self, confirmation, action, press_ms, release_ms):
+        # The sequence starts when the macro scheduler starts this action.
+        confirmation.begin_confirmation(time.monotonic())
+        macro = self._resolve_macro(action) if action else None
+        if isinstance(macro, list):
+            yield from self._script_steps(macro, context="tap")
+        elif macro is not None:
+            yield from self._tap_steps(macro, press_ms, release_ms)
 
     def handle_analogs(self, state):
         """Apply analog zone transitions and run enter/exit behavior macros."""

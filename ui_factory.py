@@ -13,7 +13,11 @@ def init_ui(ui_mode, sbc, config_view, config_root, config_path, reload_callback
     - `console`: curses UI
     - `pygame`: pygame UI
     - `auto`: try pygame, fallback to console
+    - `web`: serve the HTML MFD to a local browser
     """
+    if ui_mode == "web":
+        from ui_web import WebMFD
+        return WebMFD(sbc, config_view, config_root, config_path, reload_callback)
     if ui_mode in ("pygame", "auto"):
         try:
             from ui_pygame import PygameMFD

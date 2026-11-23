@@ -6,6 +6,7 @@ import usb.util
 from collections import deque
 
 from analog_jitter import AdaptiveJitter
+from hold_confirmation import HoldConfirmation
 
 """
 Hardware driver and controller-state adapter for the Steel Battalion Controller.
@@ -145,6 +146,7 @@ class SBCDriver:
         self.led_name_to_button_index = {v: k for k, v in self.button_to_led_name.items()}
         self.led_modes = {}
         self.analog_config = {}
+        self.hold_confirmations = {}
         self.analog_samples = {}
         self.analog_jitter = {}
         self.logical_state = {}
@@ -420,6 +422,13 @@ class SBCDriver:
         self.update_gear_lights = bool(update)
         self.gear_light_intensity = self._clamp_intensity(intensity)
 
+    def set_hold_confirmations(self, durations):
+        self.hold_confirmations = {
+            name: HoldConfirmation(duration)
+            for name, duration in durations.items()
+            if name in self.led_name_to_button_index and isinstance(duration, (int, float)) and duration > 0
+        }
+
     def set_led_modes(self, modes):
         self.led_modes = modes
 
@@ -450,6 +459,18 @@ class SBCDriver:
             led_id = self.led_name_to_id[led_name]
             mode_raw = self.led_modes.get(led_name, led_mode)
             mode, latched_peers = self._parse_led_mode(mode_raw)
+
+            confirmation = self.hold_confirmations.get(led_name)
+            if confirmation is not None:
+                pressed = self.get_button_state(button_index)
+                intensity = confirmation.update(
+                    now, pressed, pressed and self.button_changed(button_index),
+                    self.FLASH_PERIOD_S, self.MAX_LIGHT_INTENSITY,
+                )
+                if self.led_state.get(led_id, 0) != intensity:
+                    self.set_led(led_id, intensity, send=False)
+                    dirty = True
+                continue
 
             if mode == "toggle":
                 if self.button_changed(button_index) and self.get_button_state(button_index):
