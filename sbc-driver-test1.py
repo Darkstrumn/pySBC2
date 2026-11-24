@@ -73,6 +73,7 @@ def apply_config(sbc, effective):
                     led_modes[name] = str(value).strip()
                     break
     sbc.set_led_modes(led_modes)
+    sbc.set_button_states(effective.get("button_states", {}), effective.get("button_confirm_ms", {}))
     sbc.set_hold_confirmations(effective.get("button_confirm_ms", {}))
     return led_mode
 

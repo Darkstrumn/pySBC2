@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
+from button_states import ButtonStates
 from macro_engine import MacroEngine
 from ship_power import POWER_CONTROLS
 
@@ -18,6 +19,7 @@ BUTTON_PRESETS = {
     "Momentary Flash": ("flash", 0),
     "Mutually Exclusive Group": ("exclusive", 0),
     "Selective Interlock": ("selective", 0),
+    "Multi-state": ("latched", 1200),
     "Hold to Confirm": ("flash", 1200),
 }
 
@@ -39,7 +41,8 @@ class MFDSettings:
         ))
         minimum = 2 if preset == "Selective Interlock" else 1
         if len(peers) < minimum or any(
-            peer == led or peer in POWER_CONTROLS or peer not in self.sbc.led_name_to_button_index
+            peer == led or peer in POWER_CONTROLS or peer in self.config_view.get("button_states", {})
+            or peer not in self.sbc.led_name_to_button_index
             for peer in peers
         ):
             raise ValueError("Enter valid, distinct LED peer names")
@@ -95,6 +98,15 @@ class MFDSettings:
             duration = int(update["hold_ms"])
             if not 0 <= duration <= 10000 or led in POWER_CONTROLS and duration == 0:
                 raise ValueError("Enter 1–10000 ms for power controls, or 0–10000 ms for other controls")
+            states = dict(self.config_view.get("button_states", {}))
+            if update.get("preset") == "Multi-state":
+                transitions = json.loads(update["states"])
+                ButtonStates(transitions, duration, self.sbc.button_name_to_index)
+                states[led] = transitions
+                mode = "latched"
+            elif update.get("preset") != "Current configuration":
+                states.pop(led, None)
+            profile["button_states"] = states
             previous = self.config_view.get("control_macros", {}).get(control)
             if isinstance(previous, dict):
                 mapping = dict(previous, action=action)
