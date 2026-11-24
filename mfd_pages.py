@@ -84,7 +84,11 @@ class MFDSettingsPages:
             self._select_control(controls[0])
         self._step("Choose an SBC control", self.control, controls, self._select_control, 98)
         if self.control in POWER_CONTROLS:
-            label = "Guarded Ignition: Off / On / Standby" if self.control == "Ignition" else "Guarded Drive Start: Standby / On"
+            label = {
+                "CockpitHatch": "Guarded Cockpit Hatch: Open / Closed",
+                "Ignition": "Guarded Ignition: Off / On / Standby",
+                "Start": "Guarded Drive Start: Standby / On",
+            }[self.control]
             self._text(label, 22, 172, self.font_label, self.accent)
         else:
             self._step("Button preset", self.control_preset, ["Current configuration", *BUTTON_PRESETS],

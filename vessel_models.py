@@ -80,13 +80,15 @@ class CoreVesselModel:
             return
         self.guarded_power = True
         updated = {
+            "hatch_closed": power.hatch_closed,
             "ignition": power.ignition.lower(),
             "engines": power.engines,
             "online": power.engines,
             "reactor_ready": not power.missing,
             "power_state": "main_reactor" if power.engines else
                            {"On": "ignition", "Standby": "standby", "Off": "offline"}[power.ignition],
-            "startup_state": "online" if power.engines else power.ignition.lower(),
+            "startup_state": ("online" if power.engines else power.ignition.lower())
+                             if power.hatch_closed else "await_hatch",
         }
         changed = any(self.state.get(key) != value for key, value in updated.items())
         self.state.update(updated)

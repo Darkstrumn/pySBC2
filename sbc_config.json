@@ -6,7 +6,7 @@
       "button_confirm_ms": { "TankDetach": 1200 },
       "led_modes": {
         "Eject": "flash",
-        "CockpitHatch": "flash",
+        "CockpitHatch": "latched",
         "Ignition": "latched",
         "Start": "latched",
         "OpenClose": "toggle",

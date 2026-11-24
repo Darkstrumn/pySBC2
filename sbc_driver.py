@@ -659,10 +659,11 @@ class SBCDriver:
             self._flash_on = not self._flash_on
             self._last_flash_toggle = now
 
-    def _wait_for_button(self, button_name, led_name, require_toggles=False):
+    def _wait_for_button(self, button_name, led_name, require_toggles=False, tap_s=None):
         """Startup helper: block until required button is pressed."""
         button_index = self.button_name_to_index[button_name]
         led_id = self.led_name_to_id[led_name]
+        pressed_at = None
         while True:
             buf = self.read_raw()
             self.prev_control_data = self.raw_control_data
@@ -682,9 +683,17 @@ class SBCDriver:
             ):
                 self._wait_for_toggles_on()
                 continue
-            if self.button_changed(button_index) and self.get_button_state(button_index):
-                self.set_led(led_id, self.MAX_LIGHT_INTENSITY, send=True)
-                return
+            pressed = self.get_button_state(button_index)
+            if self.button_changed(button_index) and pressed:
+                pressed_at = time.monotonic()
+                if tap_s is None:
+                    self.set_led(led_id, self.MAX_LIGHT_INTENSITY, send=True)
+                    return
+            elif not pressed and pressed_at is not None:
+                if time.monotonic() - pressed_at < tap_s:
+                    self.set_led(led_id, self.MAX_LIGHT_INTENSITY, send=True)
+                    return
+                pressed_at = None
 
             time.sleep(self.TIME_BETWEEN_POLLS_MS / 1000.0)
 
@@ -733,7 +742,9 @@ class SBCDriver:
             self.ui.set_boot_mode(True, stage="Boot", message="Initializing systems")
             self.ui.render(self.parse_raw_state(self.read_raw()))
         self._run_boot_diagnostics()
-        self._wait_for_button("CockpitHatch", "CockpitHatch")
+        self._wait_for_button("CockpitHatch", "CockpitHatch",
+                              tap_s=self.ship_power.gestures["CockpitHatch"].hold_s)
+        self.ship_power.boot_close_hatch()
         self._wait_for_toggles_on()
         self._wait_for_button("Ignition", "Ignition", require_toggles=True)
         self.ship_power.boot_ignition()

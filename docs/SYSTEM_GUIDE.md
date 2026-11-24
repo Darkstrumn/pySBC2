@@ -379,6 +379,12 @@ presets. For example, Selective Interlock on F1 with F2 and F3 allows F2
 and F3 together. Presets do not supply a game binding. Tank Detach is an
 example of Hold to Confirm and can be assigned the command of your choice.
 
+The Cockpit Hatch starts open and unlit. Tap to close it and latch the LED on.
+To exit the vessel, set all five switches OFF and hold Cockpit Hatch. The
+MFD lists any switches still on. Opening the hatch brings Ignition and the
+drives to Off and leaves the controller running. Close the hatch before
+arming Ignition again. The four-button maintenance gesture is separate.
+
 Startup walks through cockpit, switch, ignition, and drive checks. After
 startup, hold Ignition to enter Standby and stop the drives. With all
 five switches on, hold Ignition again to turn it Off. A short press from

@@ -357,7 +357,8 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
             "flight": f"Gear  {gear_label(state['gear'])}     Tuner  {state['tuner']}     Layer  {self.layer}",
             "confirmation": (
                 f"Tank Detach  {confirmation.phase.title()}" if confirmation and confirmation.phase != "idle"
-                else f"Ignition  {power.ignition.upper()}     Drives  {'ON' if power.engines else 'STANDBY'}"
+                else f"Hatch {'CLOSED' if power.hatch_closed else 'OPEN'}   "
+                     f"Ignition {power.ignition.upper()}   Drives {'ON' if power.engines else 'STANDBY'}"
             ),
         }
         if self.tab == "about":
@@ -376,6 +377,8 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
             self.layout.draw(self, self.layout.pages["settings-back"], values, widgets)
         if self.editor:
             self._render_editor()
+        elif self.tab == "main" and power.message.startswith("Hatch interlock"):
+            self._preflight(state, "HATCH INTERLOCK", power.message, top=76, required_on=False)
         elif self.tab == "main" and power.message.startswith("Ignition interlock"):
             self._preflight(state, "IGNITION INTERLOCK", power.message, top=76)
         elif self.tab in self.layout.pages:
@@ -398,7 +401,7 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
                     self.targets.clear()
                     break
 
-    def _preflight(self, state, stage, instruction, top=76):
+    def _preflight(self, state, stage, instruction, top=76, required_on=True):
         amber = (255, 156, 58)
         self._box((18, top, 764, 313), (29, 23, 17))
         self._box((18, top, 764, 3), amber)
@@ -409,20 +412,23 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
             enabled = state["buttons"][index]
             y = top + 94 + row * 31
             self._box((38, y, 720, 27), (39, 31, 23))
-            color = (157, 218, 144) if enabled else amber
+            ready = enabled == required_on
+            color = (157, 218, 144) if ready else amber
             self._box((48, y + 7, 7, 13), color)
             self._text(label, 68, y + 4)
-            self._text("ON" if enabled else "SET ON", 646, y + 4, color=color)
+            position = "ON" if required_on else "OFF"
+            self._text(position if ready else f"SET {position}", 646, y + 4, color=color)
         power = self.sbc.ship_power
-        self._text(f"IGNITION  {power.ignition.upper()}     DRIVES  {'ON' if power.engines else 'STANDBY'}",
+        self._text(f"HATCH {'CLOSED' if power.hatch_closed else 'OPEN'}     "
+                   f"IGNITION {power.ignition.upper()}     DRIVES {'ON' if power.engines else 'STANDBY'}",
                    38, top + 264, self.font_label, amber)
 
     def _render_boot(self, state):
         """Render the flight computer's preflight checklist."""
         instructions = {
             "Boot": ("FLIGHT COMPUTER", "Stand by while the flight computer initializes."),
-            "Diagnostics": ("SELF-TEST COMPLETE", "Press Cockpit Hatch to secure the cockpit."),
-            "CockpitHatch": ("SECURE COCKPIT", "Press Cockpit Hatch to continue."),
+            "Diagnostics": ("SELF-TEST COMPLETE", "Tap Cockpit Hatch to secure the cockpit."),
+            "CockpitHatch": ("SECURE COCKPIT", "Tap Cockpit Hatch to continue."),
             "Toggles": ("PREFLIGHT CHECKS", "Set each required switch to ON."),
             "Ignition": ("ARM IGNITION", "Press Ignition to power the ship and enable the Nostromo N52."),
             "Start": ("ENGAGE DRIVES", "Press Start to bring the drives and GameVoice online."),
