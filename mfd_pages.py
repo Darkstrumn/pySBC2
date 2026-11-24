@@ -2,6 +2,7 @@
 
 import json
 
+from button_states import DEFAULT_TRANSITIONS
 from mfd_settings import BUTTON_PRESETS, THEMES
 from ship_power import POWER_CONTROLS
 
@@ -60,7 +61,9 @@ class MFDSettingsPages:
         self.control_mode = self.sbc.led_modes.get(led, "toggle")
         duration = self.config_view.get("button_confirm_ms", {}).get(led, 0)
         self.control_hold = str(duration or (1200 if name in POWER_CONTROLS else 0))
-        self.control_preset = "Current configuration"
+        states = self.config_view.get("button_states", {}).get(led)
+        self.control_preset = "Multi-state" if states is not None else "Current configuration"
+        self.control_states = json.dumps(states if states is not None else DEFAULT_TRANSITIONS)
         _, peers = self.sbc._parse_led_mode(self.control_mode)
         self.control_peers = ",".join(peers)
 
@@ -73,7 +76,8 @@ class MFDSettingsPages:
         self.control_hold = str(duration)
 
     def _edit_control_action(self, field):
-        fields = {"action": ("KEY_ action or macro name", "control_action"),
+        fields = {"states": ("State transitions and LED patterns (JSON)", "control_states"),
+                  "action": ("KEY_ action or macro name", "control_action"),
                   "hold": ("Hold duration in milliseconds", "control_hold"),
                   "peers": ("Comma-separated LED names, e.g. F2,F3", "control_peers")}
         self._edit_text(*fields[field])
@@ -101,6 +105,8 @@ class MFDSettingsPages:
             ("action", "Enter KEY_ action"), ("peers", "Edit LED peers") if linked else ("hold", "Edit hold time"),
             ("save", "Save & Apply"),
         ], self._button_setting, 330)
+        if self.control_preset == "Multi-state":
+            self._button("Edit states & LEDs", (22, 391, 240, 44), lambda: self._button_setting("states"))
 
     def _button_setting(self, field):
         if field != "save":
@@ -108,7 +114,8 @@ class MFDSettingsPages:
         else:
             self._apply_from_panel(kind="button", name=self.control, mode=self.control_mode,
                                    action=self.control_action, hold_ms=self.control_hold,
-                                   layer=self.control_layer, preset=self.control_preset, peers=self.control_peers)
+                                   layer=self.control_layer, preset=self.control_preset, peers=self.control_peers,
+                                   states=self.control_states)
 
     def _select_macro(self, name):
         self.macro_name = name

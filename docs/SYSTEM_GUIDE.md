@@ -406,3 +406,27 @@ Use JSON `null` to disable the gate. This is a local button macro gate and
 does not track the game's deployed hardpoint state or modify existing key
 bindings. Map the chosen switch separately if it should also command
 hardpoints in the game.
+
+#### Multi-state button preset
+
+In **Settings → Button setup**, choose **Multi-state**, then **Edit states &
+LEDs**. The default starts at state 0 (off). Tap to enter state 1 (solid),
+then hold to return to state 0. A tap releases within 350 ms. Releasing
+after 350 ms but before the hold threshold (1200 ms by default) aborts.
+Only a successful transition runs the assigned button action.
+
+States may use `off`, `solid`, `blink`, or `breathe`. Each transition can
+require any combination of named SBC controls to be logically on or off.
+Physical toggle inputs use their current switch positions. For example:
+
+```json
+{
+  "0": {"led": "off", "short": {"to": 1, "requires": {"ToggleBufferMaterial": true}}},
+  "1": {"led": "solid", "long": {"to": 2}},
+  "2": {"led": "breathe", "long": {"to": 0, "requires": {"Start": false}}}
+}
+```
+
+The profile stores this under `button_states`, keyed by LED name, and uses
+`button_confirm_ms` for the hold duration. Cockpit Hatch, Ignition, and Start
+retain their dedicated vessel interlocks and use the same tap cutoff.

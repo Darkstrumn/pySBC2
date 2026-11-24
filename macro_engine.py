@@ -246,7 +246,7 @@ class MacroEngine:
         self._release_hardpoint_hold(control_name)
         yield from ()
 
-    def handle_button_event(self, control_name, pressed, changed=True, default_led_mode="toggle"):
+    def handle_button_event(self, control_name, pressed, changed=True, default_led_mode="toggle", force_tap=False):
         """Dispatch one control edge event through configured macro mapping."""
         guarded = control_name in HARDPOINT_CONTROLS and self.hardpoints_switch is not None
         if guarded and not pressed:
@@ -263,7 +263,9 @@ class MacroEngine:
             self.sbc.button_name_to_index.get(control_name, -1),
             control_name,
         )
-        if behavior == "from_led":
+        if force_tap:
+            behavior = "tap"
+        elif behavior == "from_led":
             behavior = self._behavior_from_led(led_name, default_led_mode)
 
         macro = self._resolve_macro(action_name)
@@ -289,16 +291,16 @@ class MacroEngine:
                 self._release_hardpoint_hold(name)
         confirmations = getattr(self.sbc, "hold_confirmations", {})
         power = getattr(self.sbc, "ship_power", None)
-        if power is not None:
-            for name in power.transitions:
-                action, _, press_ms, release_ms = self._resolve_control_action(name)
-                macro = self._resolve_macro(action) if action else None
-                self._dispatch_action(macro, "tap", True, True, press_ms, release_ms)
+        stateful = getattr(self.sbc, "stateful_buttons", {})
+        transitions = getattr(self.sbc, "stateful_transitions", ())
+        for name in (*transitions, *(power.transitions if power is not None else ())):
+            self.handle_button_event(name, True, True, default_led_mode, force_tap=True)
         for control_name in self.control_macros:
             if power is not None and control_name in POWER_CONTROLS:
                 continue
             index = self.sbc.button_name_to_index.get(control_name)
-            if self.sbc.button_to_led_name.get(index) in confirmations:
+            led = self.sbc.button_to_led_name.get(index)
+            if led in confirmations or led in stateful:
                 continue
             if index is None or not self.sbc.button_changed(index):
                 continue
@@ -307,7 +309,7 @@ class MacroEngine:
             self.handle_button_event(control_name, pressed, True, default_led_mode)
 
         for led_name, confirmation in confirmations.items():
-            if confirmation.confirmed:
+            if led_name not in stateful and confirmation.confirmed:
                 confirmation.confirmed = False
                 index = self.sbc.led_name_to_button_index[led_name]
                 control_name = self.sbc.button_names[index]

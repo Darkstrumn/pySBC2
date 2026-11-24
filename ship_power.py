@@ -1,5 +1,6 @@
 """Guarded cockpit power controls, driven by the existing button sample loop."""
 
+from button_states import SHORT_PRESS_S
 from hold_confirmation import HoldConfirmation
 
 PREFLIGHT_SWITCHES = {
@@ -53,10 +54,13 @@ class ShipPower:
                 gesture.cancel()
                 levels[name] = maximum if self.enabled(name) else 0
                 continue
+            if rising(name) and gesture.phase == "aborted":
+                gesture.cancel()
             before = gesture.phase
+            elapsed = now - gesture.started
             pressed = read(name)
             level = gesture.update(now, pressed, rising(name), flash_s, maximum)
-            if before == "holding" and gesture.phase == "aborted" and not self.enabled(name):
+            if before == "holding" and gesture.phase == "aborted" and not self.enabled(name) and elapsed <= SHORT_PRESS_S:
                 if self._short_press(name):
                     gesture.cancel()
             elif gesture.confirmed:

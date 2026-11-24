@@ -6,6 +6,7 @@ import usb.util
 from collections import deque
 
 from analog_jitter import AdaptiveJitter
+from button_states import ButtonStates
 from hold_confirmation import HoldConfirmation
 from ship_power import POWER_CONTROLS, PREFLIGHT_SWITCHES, ShipPower
 
@@ -148,6 +149,8 @@ class SBCDriver:
         self.led_modes = {}
         self.analog_config = {}
         self.hold_confirmations = {}
+        self.stateful_buttons = {}
+        self.stateful_transitions = []
         self.ship_power = ShipPower()
         self.linked_peers = {}
         self.analog_samples = {}
@@ -425,6 +428,18 @@ class SBCDriver:
         self.update_gear_lights = bool(update)
         self.gear_light_intensity = self._clamp_intensity(intensity)
 
+    def set_button_states(self, configs, durations):
+        previous = self.stateful_buttons
+        self.stateful_buttons = {}
+        for name, transitions in configs.items():
+            if name in POWER_CONTROLS or name not in self.led_name_to_button_index:
+                raise ValueError(f"Invalid multi-state LED control: {name}")
+            button = ButtonStates(transitions, durations.get(name, 1200), self.button_name_to_index)
+            old = previous.get(name)
+            if old and str(old.state) in transitions:
+                button.state = old.state
+            self.stateful_buttons[name] = button
+
     def set_hold_confirmations(self, durations):
         self.ship_power.set_hold_times(durations)
         self.hold_confirmations = {
@@ -476,6 +491,19 @@ class SBCDriver:
             all(down(name) for name in self.shutdown_buttons),
             self.FLASH_PERIOD_S, self.MAX_LIGHT_INTENSITY,
         )
+        self.stateful_transitions.clear()
+        def prerequisite(name):
+            index = self.button_name_to_index[name]
+            led = self.button_to_led_name.get(index)
+            if led in POWER_CONTROLS:
+                return self.ship_power.enabled(led)
+            mode, _ = self._parse_led_mode(self.led_modes.get(led, led_mode))
+            if led in self.stateful_buttons:
+                return bool(self.stateful_buttons[led].state)
+            if led is None or mode not in ("latched", "toggle"):
+                return self.get_button_state(index)
+            return self.get_logical_state(name)
+
         for button_index, led_name in self.button_to_led_name.items():
             led_id = self.led_name_to_id[led_name]
             mode_raw = self.led_modes.get(led_name, led_mode)
@@ -483,6 +511,20 @@ class SBCDriver:
 
             if led_name in power_levels:
                 intensity = power_levels[led_name]
+                if self.led_state.get(led_id, 0) != intensity:
+                    self.set_led(led_id, intensity, send=False)
+                    dirty = True
+                continue
+
+            stateful = self.stateful_buttons.get(led_name)
+            if stateful is not None:
+                pressed = self.get_button_state(button_index)
+                intensity, committed = stateful.sample(
+                    now, pressed, pressed and self.button_changed(button_index),
+                    prerequisite, self.FLASH_PERIOD_S, self.MAX_LIGHT_INTENSITY,
+                )
+                if committed:
+                    self.stateful_transitions.append(self.button_names[button_index])
                 if self.led_state.get(led_id, 0) != intensity:
                     self.set_led(led_id, intensity, send=False)
                     dirty = True
@@ -507,6 +549,8 @@ class SBCDriver:
                     dirty = True
                     if new_intensity:
                         for peer in self.linked_peers.get(led_name, ()):
+                            if peer in self.stateful_buttons or peer in POWER_CONTROLS:
+                                continue
                             peer_id = self.led_name_to_id[peer]
                             if self.led_state.get(peer_id, 0):
                                 self.set_led(peer_id, 0, send=False)
@@ -557,7 +601,9 @@ class SBCDriver:
             led_id = self.led_name_to_id.get(led_name)
             led_on = self.led_state.get(led_id, 0) > 0 if led_id is not None else False
 
-            if name in POWER_CONTROLS:
+            if led_name in self.stateful_buttons:
+                self.logical_state[name] = bool(self.stateful_buttons[led_name].state)
+            elif name in POWER_CONTROLS:
                 self.logical_state[name] = self.ship_power.enabled(name)
             elif mode in ("toggle", "latched"):
                 self.logical_state[name] = led_on
