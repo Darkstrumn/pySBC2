@@ -165,9 +165,9 @@ def load_config(path):
 def build_default_led_modes(led_name_to_id):
     """Build per-control LED mode defaults for the active controller layout."""
     defaults = {}
-    flash_names = {"Eject", "CockpitHatch"}
+    flash_names = {"Eject"}
     for name in led_name_to_id.keys():
-        defaults[name] = {"Ignition": "latched", "Start": "latched"}.get(
+        defaults[name] = {"CockpitHatch": "latched", "Ignition": "latched", "Start": "latched"}.get(
             name, "flash" if name in flash_names else "toggle"
         )
     return defaults
