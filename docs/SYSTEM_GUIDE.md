@@ -270,8 +270,8 @@ powershell -ExecutionPolicy Bypass -File services/start_process_services.ps1
 
 ### Auxiliary control surfaces
 
-In the Python read runtime, **VT Location** enables the Microsoft Game Voice
-(`045e:003b`) and **Buffer Material** enables the Nostromo n52
+In the Python read runtime, **Start** enables the Microsoft Game Voice
+(`045e:003b`) and **Ignition** enables the Nostromo n52
 (`050d:0815`). The runtime grabs their evdev nodes, including the n52 keypad
 and wheel, so auxiliary input stays inside the controller runtime. The running
 user needs permission to read and grab those input nodes. The SBC and the
@@ -279,10 +279,8 @@ auxiliary devices can start independently, and reconnects are detected during
 normal operation.
 
 The active profile's `aux_surface_switches` maps `game_voice` and
-`nostromo_n52` to SBC switch names. Set a mapping to JSON `null` to leave the
-surface disengaged and free that SBC switch for `control_macros`. Set a
-different switch name to remap the gate. The default profile assigns these
-switches to gating and leaves their ordinary key macros unassigned.
+`nostromo_n52` to SBC control names. Set a mapping to JSON `null` to leave the
+surface disengaged, or select a physical toggle switch to remap its gate.
 
 Enabled input is available as `aux_input` events on the existing event sinks,
 including `sbc/events/aux_input` when MQTT is enabled with its default topic
@@ -310,10 +308,8 @@ Match the host keys to your Elite bindings. In the default `macro_output: log`
 mode, macro key events are available through the existing event sinks. A host
 subscriber must turn them into host key input when Elite runs on another machine.
 
-Use `python3 sbc-driver-test1.py --ui=pygame` on the Pi display. Tap **Main** or
-**Settings** in the top bar. In Settings, tap a switch assignment to cycle its
-options, then tap **Save & Apply**. Tap any of the six N52 bindings to cycle the profile macros before saving. For SDL-managed touch, leave `touch_device` empty. If you configure an
-evdev touchscreen, its absolute coordinates are scaled to the Pygame window.
+Use `python3 sbc-driver-test1.py --ui=pygame` on the Pi display. Tap **Settings**
+then **Auxiliary controls** to edit the switch assignments and key bindings.
 
 Layout references: [Belkin n52 manual](https://cache-www.belkin.com/support/dl/f8gpc100_man.pdf), [Steel Battalion in Elite](https://www.reddit.com/r/EliteDangerous/comments/g11em9), and [ITBSBC](https://github.com/kgmonteith/ITBSBC). The Elite action choices above are project defaults.
 
@@ -325,10 +321,74 @@ and activates the visible target on release. The Pi user needs permission to
 read and grab the touchscreen node. SDL finger events are also supported when
 SDL provides them.
 
-In **Settings**, use **Switches**, **Nostromo N52**, or **GameVoice**. Use
+By default, Ignition enables the Nostromo N52 and Start enables GameVoice.
+The gates follow the committed power state through LED animations.
+In **Settings → Auxiliary controls**, use **Switches**, **Nostromo N52**,
+or **GameVoice**. Use
 **Next** and **Previous** to browse the bindings and tap a row to cycle its
 macro. The N52 includes the wheel click and both scroll directions. Each scroll
 event can invoke one macro for its direction. GameVoice lists the buttons
 reported by the device when you open its tab. Its **Unmapped buttons** row
 controls the fallback macro, and a button explicitly set to **Unassigned**
 suppresses that fallback. Tap **Save & Apply** to persist the profile edits.
+
+### HTML MFD and hold-to-confirm buttons
+
+Run the Pygame MFD from the Pi's physical console with the framebuffer
+settings that worked in the SDL 1.2 display test. For an SDL build that
+provides the `fbcon` driver, use:
+
+```sh
+SDL_VIDEODRIVER=fbcon SDL_FBDEV=/dev/fb0 python3 sbc-driver-test1.py --ui=pygame
+```
+
+Edit `mfd/panel.html` and restart the app to update the screen layout. Pygame
+draws the panel directly on its SDL display. The layout uses well-formed HTML
+with `header` and `section id` pages, `div data-rect="x,y,w,h"` panels,
+`span data-pos="x,y"` labels, and `button data-rect data-action` touch
+targets. Labels can bind to runtime values through `data-value`. Dynamic
+widgets and page actions are registered in Python. The renderer supports
+this subset of HTML, with styles defined by the Pygame theme.
+
+Main shows live LED brightness and marks physically held buttons and active
+switches. The old dashboard is under **Settings → Diagnostics**. Settings also
+opens button setup, a macro JSON editor with a touch keyboard, themes and
+profiles, About, and Help. About shows the local Git tag or revision when
+available, runtime versions, display driver, and touch input source. Restart
+the runtime if a profile changes startup-only settings such as the output backend.
+
+The Elite and Horizons starter profiles copy the bundled Elite mappings.
+Star Citizen, EVE Online, MechWarrior, OBS, and Kerbal Space Program starters
+copy the hardware settings and provide themed profiles ready for custom bindings.
+
+Tank Detach defaults to a 1200 ms hold. It flashes while held, fades on an
+early release, and on confirmation gives three fast flashes followed by two
+flash periods solid and then off. The configured action starts with the
+confirmation sequence. Set a named macro or `KEY_*` action in Button setup
+to enable host output. A zero confirmation duration restores normal dispatch.
+
+#### Button presets and ship power
+
+**Button setup** offers Momentary (lit while pressed), Latched Toggle (press
+to switch on or off), Momentary Flash (blinks while pressed), Mutually
+Exclusive Group (one active member), Selective Interlock (the selected
+control excludes all listed peers, which can coexist with one another),
+and Hold to Confirm (defaults to 1200 ms with blink, abort fade, and
+confirmation flashes). Enter LED names separated by commas for linked
+presets. For example, Selective Interlock on F1 with F2 and F3 allows F2
+and F3 together. Presets do not supply a game binding. Tank Detach is an
+example of Hold to Confirm and can be assigned the command of your choice.
+
+Startup walks through cockpit, switch, ignition, and drive checks. After
+startup, hold Ignition to enter Standby and stop the drives. With all
+five switches on, hold Ignition again to turn it Off. A short press from
+Off or Standby restores it to On once the switch checklist passes. With
+Ignition On, tap Start to engage the drives and hold Start to disengage.
+A short press of either active control shows abort feedback and keeps its
+power state. The MFD describes any blocked operation. Physical LEDs
+settle to the current power state after feedback.
+
+A configured Ignition or Start action fires on a committed transition.
+Stopping the drives by moving Ignition to Standby also invokes the
+configured Start action. The built-in states gate inputs locally and
+publish vessel state. Bind or route game-specific actions separately.

@@ -3,11 +3,12 @@
   "profiles": {
     "default": {
       "led_mode": "toggle",
+      "button_confirm_ms": { "TankDetach": 1200 },
       "led_modes": {
         "Eject": "flash",
         "CockpitHatch": "flash",
-        "Ignition": "flash",
-        "Start": "flash",
+        "Ignition": "latched",
+        "Start": "latched",
         "OpenClose": "toggle",
         "MapZoomInOut": "momentary",
         "ModeSelect": "momentary",
@@ -146,8 +147,8 @@
       },
       "macro_output": "log",
       "aux_surface_switches": {
-        "game_voice": "ToggleVTLocation",
-        "nostromo_n52": "ToggleBufferMaterial"
+        "game_voice": "Start",
+        "nostromo_n52": "Ignition"
       },
       "aux_key_macros": {
         "game_voice": { "*": "GAMEVOICE_INPUT_TEST" },

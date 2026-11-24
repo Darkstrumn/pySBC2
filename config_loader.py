@@ -142,8 +142,8 @@ def load_config(path):
             },
         },
         "aux_surface_switches": {
-            "game_voice": "ToggleVTLocation",
-            "nostromo_n52": "ToggleBufferMaterial",
+            "game_voice": "Start",
+            "nostromo_n52": "Ignition",
         },
         "aux_key_macros": {},
         "touch_device": "",
@@ -165,7 +165,9 @@ def load_config(path):
 def build_default_led_modes(led_name_to_id):
     """Build per-control LED mode defaults for the active controller layout."""
     defaults = {}
-    flash_names = {"Eject", "CockpitHatch", "Ignition", "Start"}
+    flash_names = {"Eject", "CockpitHatch"}
     for name in led_name_to_id.keys():
-        defaults[name] = "flash" if name in flash_names else "toggle"
+        defaults[name] = {"Ignition": "latched", "Start": "latched"}.get(
+            name, "flash" if name in flash_names else "toggle"
+        )
     return defaults

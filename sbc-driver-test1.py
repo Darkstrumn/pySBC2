@@ -73,6 +73,7 @@ def apply_config(sbc, effective):
                     led_modes[name] = str(value).strip()
                     break
     sbc.set_led_modes(led_modes)
+    sbc.set_hold_confirmations(effective.get("button_confirm_ms", {}))
     return led_mode
 
 
@@ -238,6 +239,7 @@ def main():
             sbc.startup_sequence()
             aux_input.poll(time.monotonic(), active=False)
             vessel_model.on_boot_complete()
+            vessel_model.sync_ship_power(sbc.ship_power)
             macro_engine.run_macro(effective.get("powerup_macro", ""))
             macro_engine.cooperative_timing = True
 

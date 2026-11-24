@@ -2,6 +2,8 @@
 
 import time
 
+from ship_power import POWER_CONTROLS
+
 
 # Stable USB IDs from the Pi probe. The N52 exposes multiple evdev nodes.
 SURFACE_IDS = {"game_voice": (0x045E, 0x003B), "nostromo_n52": (0x050D, 0x0815)}
@@ -105,8 +107,11 @@ class AuxInput:
             self.next_scan = now_s + 1.0
         ecodes = self.evdev.ecodes
         for path, (device, surface, pressed) in list(self.devices.items()):
-            index = self.sbc.button_name_to_index.get(self.switches.get(surface))
-            enabled = active and index is not None and self.sbc.get_button_state(index)
+            gate = self.switches.get(surface)
+            index = self.sbc.button_name_to_index.get(gate)
+            enabled = active and index is not None and (
+                self.sbc.ship_power.enabled(gate) if gate in POWER_CONTROLS else self.sbc.get_button_state(index)
+            )
             if not enabled:
                 self._release(surface, pressed)
             try:

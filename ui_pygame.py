@@ -1,8 +1,14 @@
-import json
+import platform
+import re
+import subprocess
 import time
+from functools import lru_cache
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
+from mfd_layout import MFDLayout
+from mfd_pages import MFDSettingsPages
+from mfd_settings import MFDSettings, THEMES
+from ship_power import POWER_CONTROLS, PREFLIGHT_SWITCHES
 from ui_common import build_dashboard, gear_label
 
 """Pygame-based MFD UI backend."""
@@ -21,7 +27,13 @@ N52_CONTROLS = (
 )
 
 
-class PygameMFD:
+THEME_ACCENTS = dict(zip(THEMES, (
+    (255, 147, 46), (255, 176, 68), (101, 204, 250), (108, 227, 180),
+    (185, 222, 112), (184, 164, 255), (246, 212, 109),
+)))
+
+
+class PygameMFD(MFDSettingsPages, MFDSettings):
     """Graphical dashboard UI used as an alternative to curses console UI."""
 
     def __init__(self, sbc, config_view, config_root, config_path, reload_callback=None):
@@ -32,6 +44,21 @@ class PygameMFD:
         self.config_path = Path(config_path)
         self.reload_callback = reload_callback
         self.tab = "main"
+        project = Path(__file__).resolve().parent
+        self.layout = MFDLayout(project / "mfd" / "panel.html")
+        try:
+            revision = subprocess.check_output(
+                ["git", "describe", "--tags", "--always", "--dirty"],
+                cwd=str(project), stderr=subprocess.DEVNULL, timeout=1,
+            ).decode().strip()
+        except (OSError, subprocess.SubprocessError):
+            revision = "revision unavailable"
+        self.build = f"Build: {revision}"
+        self.editor = None
+        self.profile_choice = None
+        self.control = None
+        self._select_macro("")
+        self.labels = [self._indicator_label(name) for name in self.sbc.button_names]
         self.targets = []
         self.pending_gates = None
         self.pending_bindings = None
@@ -47,6 +74,7 @@ class PygameMFD:
         self.pygame.init()
         try:
             self.screen = self.pygame.display.set_mode((800, 480))
+            self.pygame.mouse.set_visible(False)
         except self.pygame.error:
             self.pygame.quit()
             raise
@@ -55,6 +83,7 @@ class PygameMFD:
         self.font_title = self.pygame.font.SysFont("DejaVu Sans", 22)
         self.font_label = self.pygame.font.SysFont("DejaVu Sans", 18)
         self.font_small = self.pygame.font.SysFont("DejaVu Sans", 16)
+        self._render_text = lru_cache(maxsize=384)(self._render_label)
         self.bg = (10, 12, 18)
         self.panel = (20, 24, 36)
         self.accent = (70, 170, 200)
@@ -120,24 +149,38 @@ class PygameMFD:
         """Expose active macro layer in UI."""
         self.layer = layer
 
-    def _text(self, label, x, y, font=None, color=None):
-        self.screen.blit((font or self.font_small).render(str(label), True, color or self.text), (x, y))
+    @staticmethod
+    def _render_label(font, label, color):
+        return font.render(label, True, color)
+
+    def _text(self, label, x, y, font=None, color=None, max_width=None):
+        surface = self._render_text(font or self.font_small, str(label), color or self.text)
+        area = None if max_width is None else (0, 0, max_width, surface.get_height())
+        self.screen.blit(surface, (x, y), area)
 
     def _box(self, rect, color=None):
         self.pygame.draw.rect(self.screen, color or self.panel, rect)
 
     def _button(self, label, rect, action, selected=False):
-        self._box(rect, (26, 82, 100) if selected else self.panel)
+        self._box(rect, tuple(value // 4 for value in self.accent) if selected else self.panel)
         self._text(label, rect[0] + 12, rect[1] + 13, self.font_label)
         self.targets.append((self.pygame.Rect(rect), action))
 
-    def _open_settings(self):
+    def _open_page(self, page):
+        self.tab = page
+        self.editor = None
+        if page == "auxiliary":
+            self._open_auxiliary()
+        elif page == "profiles":
+            theme = self.config_view.get("mfd_theme", "elite")
+            self.theme_choice = theme if theme in THEMES else "elite"
+
+    def _open_auxiliary(self):
         self.pending_gates = dict(self.config_view.get("aux_surface_switches", {}))
         self.pending_bindings = {
             surface: dict(bindings)
             for surface, bindings in self.config_view.get("aux_key_macros", {}).items()
         }
-        self.tab = "settings"
         self._select_settings_surface(None)
 
     def _select_settings_surface(self, surface):
@@ -150,7 +193,7 @@ class PygameMFD:
         other_gates = {gate for name, gate in self.pending_gates.items() if name != surface}
         choices = [None] + [
             name for name in self.sbc.button_names
-            if name.startswith("Toggle") and name not in other_gates
+            if (name.startswith("Toggle") or name in POWER_CONTROLS) and name not in other_gates
         ]
         current = self.pending_gates.get(surface)
         index = choices.index(current) if current in choices else -1
@@ -164,34 +207,41 @@ class PygameMFD:
         bindings[key] = choices[(index + 1) % len(choices)]
 
     def _save_settings(self):
-        root = dict(self.config_root)
-        profiles = dict(root.get("profiles", {}))
-        active = root.get("active_profile", "default")
-        profile = dict(profiles.get(active, {}))
-        profile["aux_surface_switches"] = dict(self.pending_gates)
-        profile["aux_key_macros"] = self.pending_bindings
-        profiles[active] = profile
-        root["profiles"] = profiles
-        temp_path = None
-        try:
-            with NamedTemporaryFile(mode="w", dir=self.config_path.parent, delete=False) as handle:
-                temp_path = Path(handle.name)
-                json.dump(root, handle, indent=2)
-                handle.write("\n")
-            temp_path.replace(self.config_path)
-            if self.reload_callback is not None:
-                self.reload_callback()
-            else:
-                self.config_root = root
-                self.config_view = dict(self.config_view, **profile)
-            self.status_message = "Auxiliary settings saved"
-        except OSError as exc:
-            self.status_message = f"Save failed: {exc}"
-        finally:
-            if temp_path is not None and temp_path.exists():
-                temp_path.unlink()
+        self._apply_from_panel(kind="auxiliary", settings={
+            "aux_surface_switches": dict(self.pending_gates),
+            "aux_key_macros": self.pending_bindings,
+        })
 
-    def _render_main(self, state):
+    @staticmethod
+    def _indicator_label(name):
+        for prefix, short in (("MultiMon", "Multi "), ("MainMon", "Main "),
+                              ("Function", ""), ("WeaponCtrl", "Weapon "),
+                              ("RightJoy", "R "), ("LeftJoy", "L "), ("Toggle", "")):
+            if name.startswith(prefix):
+                name = short + name[len(prefix):]
+                break
+        return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
+
+    def _render_indicators(self, state, rect):
+        left, top, width, _ = rect
+        column = width // 5
+        for index, name in enumerate(self.labels):
+            x = left + 10 + index % 5 * column
+            y = top + 35 + index // 5 * 30
+            led = self.sbc.button_to_led_name.get(index)
+            held = state["buttons"][index]
+            level = self.sbc.led_state.get(self.sbc.led_name_to_id.get(led), 0)
+            if led is None:
+                level = self.sbc.INTENSITY_MAX if held else 0
+            fraction = level / self.sbc.INTENSITY_MAX
+            color = tuple(int(42 + (value - 42) * fraction) for value in self.accent)
+            self.pygame.draw.circle(self.screen, color, (x + 5, y + 10), 5)
+            self._text(name, x + 15, y, color=self.text if held or level else self.dim,
+                       max_width=column - 22)
+            if held:
+                self._box((x + 14, y + 19, column - 24, 2), self.accent)
+
+    def _render_diagnostics(self, state):
         data = build_dashboard(state, self.sbc)
         self._box((16, 76, 475, 338))
         self._box((505, 76, 279, 338))
@@ -214,7 +264,7 @@ class PygameMFD:
         for index, name in enumerate(data["pressed"][:12] or ["None"]):
             self._text(name, 520, 125 + index * 22)
 
-    def _render_settings(self):
+    def _render_auxiliary(self):
         for index, (surface, label) in enumerate((
             (None, "Switches"), ("nostromo_n52", "Nostromo N52"), ("game_voice", "GameVoice"),
         )):
@@ -273,10 +323,17 @@ class PygameMFD:
             if self.boot_mode:
                 continue
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_s:
-                    self._open_settings()
+                if self.editor:
+                    keys = {pygame.K_RETURN: "Done", pygame.K_ESCAPE: "Cancel",
+                            pygame.K_BACKSPACE: "Delete", pygame.K_LEFT: "<", pygame.K_RIGHT: ">"}
+                    if event.key in keys:
+                        self._edit_key(keys[event.key])
+                    elif getattr(event, "unicode", "") and event.unicode.isprintable():
+                        self._insert_text(event.unicode)
+                elif event.key == pygame.K_s:
+                    self._open_page("settings")
                 elif event.key == pygame.K_d:
-                    self.tab = "main"
+                    self._open_page("main")
             if not self.sbc.touch_enabled:
                 if event.type == getattr(pygame, "FINGERUP", None):
                     width, height = self.screen.get_size()
@@ -285,20 +342,51 @@ class PygameMFD:
                       and not getattr(event, "touch", False)):
                     self.handle_touch(*event.pos)
         if self.boot_mode:
-            self._render_boot()
+            self._render_boot(state)
             return
         self.targets.clear()
         self.screen.fill(self.bg)
-        self._text("SBC MFD", 20, 22, self.font_title)
-        self._button("Main", (490, 10, 135, 48), lambda: setattr(self, "tab", "main"), self.tab == "main")
-        self._button("Settings", (638, 10, 146, 48), self._open_settings, self.tab == "settings")
-        if self.tab == "settings":
-            self._render_settings()
+        theme = self.config_view.get("mfd_theme", "elite")
+        self.accent = THEME_ACCENTS.get(theme, THEME_ACCENTS["elite"])
+        confirmation = self.sbc.hold_confirmations.get("TankDetach")
+        power = self.sbc.ship_power
+        active = self.config_root.get("active_profile", "default")
+        values = {
+            "theme": THEMES.get(theme, THEMES["elite"]),
+            "profile": f"Profile  {active}",
+            "flight": f"Gear  {gear_label(state['gear'])}     Tuner  {state['tuner']}     Layer  {self.layer}",
+            "confirmation": (
+                f"Tank Detach  {confirmation.phase.title()}" if confirmation and confirmation.phase != "idle"
+                else f"Ignition  {power.ignition.upper()}     Drives  {'ON' if power.engines else 'STANDBY'}"
+            ),
+        }
+        if self.tab == "about":
+            import usb
+            sdl = ".".join(map(str, pygame.get_sdl_version()))
+            values.update({
+                "build": self.build,
+                "runtime": f"Python {platform.python_version()} / Pygame {pygame.version.ver} / SDL {sdl}",
+                "display": f"Display driver: {pygame.display.get_driver()}",
+                "touch": "Touch: direct input active" if self.sbc.touch_enabled else "Touch: SDL input",
+                "usb": f"PyUSB {getattr(usb, '__version__', 'version unavailable')}",
+            })
+        widgets = {"indicators": lambda rect: self._render_indicators(state, rect)}
+        self.layout.draw(self, self.layout.header, values, widgets)
+        if self.tab not in ("main", "settings"):
+            self.layout.draw(self, self.layout.pages["settings-back"], values, widgets)
+        if self.editor:
+            self._render_editor()
+        elif self.tab == "main" and power.message.startswith("Ignition interlock"):
+            self._preflight(state, "IGNITION INTERLOCK", power.message, top=76)
+        elif self.tab in self.layout.pages:
+            self.layout.draw(self, self.layout.pages[self.tab], values, widgets)
+        elif self.tab == "diagnostics":
+            self._render_diagnostics(state)
         else:
-            self._render_main(state)
-        status = self._footer_status()
+            getattr(self, "_render_" + self.tab)()
+        status = self.sbc.ship_power.message or self._footer_status()
         if status:
-            self._text(status, 22, 450, color=self.dim)
+            self._text(status, 22, 450, color=self.dim, max_width=752)
         pygame.display.flip()
 
     def handle_touch(self, x, y):
@@ -310,16 +398,39 @@ class PygameMFD:
                     self.targets.clear()
                     break
 
-    def _render_boot(self):
-        """Render simplified boot status page."""
-        spinner = ["-", "\\", "|", "/"][self._boot_spinner % 4]
-        self._boot_spinner += 1
-        self.screen.fill(self.bg)
-        title = self.font_title.render("STEEL BATTALION CONTROLLER BIOS", True, self.text)
-        self.screen.blit(title, (30, 30))
-        line1 = self.font_label.render(f"[{spinner}] Stage: {self.boot_stage}", True, self.text)
-        line2 = self.font_label.render(f"Status: {self.boot_message}", True, self.text)
-        self.screen.blit(line1, (30, 70))
-        self.screen.blit(line2, (30, 95))
+    def _preflight(self, state, stage, instruction, top=76):
+        amber = (255, 156, 58)
+        self._box((18, top, 764, 313), (29, 23, 17))
+        self._box((18, top, 764, 3), amber)
+        self._text(stage, 38, top + 18, self.font_title, amber)
+        self._text(instruction, 38, top + 56, self.font_label, max_width=722)
+        for row, (name, label) in enumerate(PREFLIGHT_SWITCHES.items()):
+            index = self.sbc.button_name_to_index[name]
+            enabled = state["buttons"][index]
+            y = top + 94 + row * 31
+            self._box((38, y, 720, 27), (39, 31, 23))
+            color = (157, 218, 144) if enabled else amber
+            self._box((48, y + 7, 7, 13), color)
+            self._text(label, 68, y + 4)
+            self._text("ON" if enabled else "SET ON", 646, y + 4, color=color)
+        power = self.sbc.ship_power
+        self._text(f"IGNITION  {power.ignition.upper()}     DRIVES  {'ON' if power.engines else 'STANDBY'}",
+                   38, top + 264, self.font_label, amber)
+
+    def _render_boot(self, state):
+        """Render the flight computer's preflight checklist."""
+        instructions = {
+            "Boot": ("FLIGHT COMPUTER", "Stand by while the flight computer initializes."),
+            "Diagnostics": ("SELF-TEST COMPLETE", "Press Cockpit Hatch to secure the cockpit."),
+            "CockpitHatch": ("SECURE COCKPIT", "Press Cockpit Hatch to continue."),
+            "Toggles": ("PREFLIGHT CHECKS", "Set each required switch to ON."),
+            "Ignition": ("ARM IGNITION", "Press Ignition to power the ship and enable the Nostromo N52."),
+            "Start": ("ENGAGE DRIVES", "Press Start to bring the drives and GameVoice online."),
+            "Power": ("DRIVES ONLINE", "Stand by while the controller finishes its lamp check."),
+        }
+        stage, instruction = instructions.get(self.boot_stage, (self.boot_stage, self.boot_message))
+        self.screen.fill((15, 13, 11))
+        self._text("SHIP SYSTEMS   /   STARTUP", 22, 24, self.font_title, (255, 156, 58))
+        self._preflight(state, stage, instruction, top=73)
         self.pygame.display.flip()
         self.clock.tick(10)
