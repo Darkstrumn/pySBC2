@@ -379,7 +379,7 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
             self._render_editor()
         elif self.tab == "main" and power.message.startswith("Hatch interlock"):
             self._preflight(state, "HATCH INTERLOCK", power.message, top=76, required_on=False)
-        elif self.tab == "main" and power.message.startswith("Ignition interlock"):
+        elif self.tab == "main" and power.message.startswith("Ignition interlock: set the required switches ON"):
             self._preflight(state, "IGNITION INTERLOCK", power.message, top=76)
         elif self.tab in self.layout.pages:
             self.layout.draw(self, self.layout.pages[self.tab], values, widgets)
@@ -387,7 +387,9 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
             self._render_diagnostics(state)
         else:
             getattr(self, "_render_" + self.tab)()
-        status = self.sbc.ship_power.message or self._footer_status()
+        status = power.message or self._footer_status()
+        if not status and power.ignition == "On" and power.missing:
+            status = "Subsystems off: " + ", ".join(power.missing)
         if status:
             self._text(status, 22, 450, color=self.dim, max_width=752)
         pygame.display.flip()
@@ -420,7 +422,7 @@ class PygameMFD(MFDSettingsPages, MFDSettings):
             self._text(position if ready else f"SET {position}", 646, y + 4, color=color)
         power = self.sbc.ship_power
         self._text(f"HATCH {'CLOSED' if power.hatch_closed else 'OPEN'}     "
-                   f"IGNITION {power.ignition.upper()}     DRIVES {'ON' if power.engines else 'STANDBY'}",
+                   f"IGNITION {power.ignition.upper()}     DRIVES {'ON' if power.engines else 'OFF'}",
                    38, top + 264, self.font_label, amber)
 
     def _render_boot(self, state):

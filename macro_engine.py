@@ -1,7 +1,7 @@
 import time
 import ast
 
-from ship_power import POWER_CONTROLS
+from ship_power import POWER_CONTROLS, PREFLIGHT_SWITCHES
 import json
 import subprocess
 from collections import deque
@@ -19,6 +19,9 @@ Responsibilities:
 """
 
 
+HARDPOINT_CONTROLS = frozenset(("RightJoyMainWeapon", "RightJoyFire", "WeaponCtrlMain", "WeaponCtrlSub"))
+
+
 class MacroEngine:
     """Runtime macro orchestrator used by the main polling loop."""
 
@@ -29,6 +32,8 @@ class MacroEngine:
         self.event_sink = event_sink
         self.input_matrix = input_matrix
         self.control_macros = config.get("control_macros", {})
+        self.hardpoints_switch = config.get("hardpoints_switch")
+        self._hardpoint_holds = {}
         self.macros = config.get("macros", {})
         self.analog_zones = config.get("analog_zones", {})
         self.gear_zones = config.get("gear_zones", [])
@@ -218,8 +223,38 @@ class MacroEngine:
             else:
                 self._run_hold_release(macro)
 
+    def _hardpoints_enabled(self):
+        if self.hardpoints_switch is None:
+            return True
+        if self.hardpoints_switch not in PREFLIGHT_SWITCHES:
+            return False
+        index = self.sbc.button_name_to_index.get(self.hardpoints_switch)
+        return index is not None and self.sbc.get_button_state(index)
+
+    def _guarded_hardpoint_steps(self, steps, control_name=None, held_macro=None):
+        if self._hardpoints_enabled():
+            if held_macro is not None:
+                self._hardpoint_holds[control_name] = held_macro
+            yield from steps
+
+    def _release_hardpoint_hold(self, control_name):
+        macro = self._hardpoint_holds.pop(control_name, None)
+        if macro is not None:
+            self._release_keys(macro.get("keys", []))
+
+    def _finish_hardpoint_hold(self, control_name):
+        self._release_hardpoint_hold(control_name)
+        yield from ()
+
     def handle_button_event(self, control_name, pressed, changed=True, default_led_mode="toggle"):
         """Dispatch one control edge event through configured macro mapping."""
+        guarded = control_name in HARDPOINT_CONTROLS and self.hardpoints_switch is not None
+        if guarded and not pressed:
+            if changed:
+                self._schedule_action(self._finish_hardpoint_hold(control_name))
+            return
+        if guarded and not self._hardpoints_enabled():
+            return
         action_name, behavior, press_ms, release_ms = self._resolve_control_action(control_name)
         if not action_name or behavior is None:
             return
@@ -234,10 +269,24 @@ class MacroEngine:
         macro = self._resolve_macro(action_name)
         if macro is None:
             return
+        if guarded and changed and (behavior == "hold" or behavior == "tap" and pressed):
+            if isinstance(macro, list):
+                steps = self._script_steps(macro, context="tap")
+            elif behavior == "hold":
+                steps = self._hold_steps(macro, pressed)
+            else:
+                steps = self._tap_steps(macro, press_ms, release_ms)
+            self._schedule_action(self._guarded_hardpoint_steps(
+                steps, control_name, macro if behavior == "hold" and isinstance(macro, dict) else None,
+            ))
+            return
         self._dispatch_action(macro, behavior, changed, pressed, press_ms, release_ms)
 
     def handle_buttons(self, state, default_led_mode):
         """Process configured control mappings from physical button edge state."""
+        if self._hardpoint_holds and not self._hardpoints_enabled():
+            for name in tuple(self._hardpoint_holds):
+                self._release_hardpoint_hold(name)
         confirmations = getattr(self.sbc, "hold_confirmations", {})
         power = getattr(self.sbc, "ship_power", None)
         if power is not None:
@@ -263,10 +312,18 @@ class MacroEngine:
                 index = self.sbc.led_name_to_button_index[led_name]
                 control_name = self.sbc.button_names[index]
                 action, _, press_ms, release_ms = self._resolve_control_action(control_name)
-                self._schedule_action(self._confirmed_steps(confirmation, action, press_ms, release_ms))
+                if control_name in HARDPOINT_CONTROLS and not self._hardpoints_enabled():
+                    confirmation.abort(time.monotonic())
+                    continue
+                self._schedule_action(self._confirmed_steps(
+                    confirmation, action, press_ms, release_ms, control_name,
+                ))
 
-    def _confirmed_steps(self, confirmation, action, press_ms, release_ms):
+    def _confirmed_steps(self, confirmation, action, press_ms, release_ms, control_name=None):
         # The sequence starts when the macro scheduler starts this action.
+        if control_name in HARDPOINT_CONTROLS and not self._hardpoints_enabled():
+            confirmation.abort(time.monotonic())
+            return
         confirmation.begin_confirmation(time.monotonic())
         macro = self._resolve_macro(action) if action else None
         if isinstance(macro, list):
@@ -664,6 +721,10 @@ class MacroEngine:
     def reload_config(self, config):
         """Reload runtime macro-related config values without process restart."""
         self.control_macros = config.get("control_macros", {})
+        if self.hardpoints_switch != config.get("hardpoints_switch"):
+            for name in tuple(self._hardpoint_holds):
+                self._release_hardpoint_hold(name)
+        self.hardpoints_switch = config.get("hardpoints_switch")
         self.macros = config.get("macros", {})
         self.analog_zones = config.get("analog_zones", {})
         self.gear_zones = config.get("gear_zones", [])

@@ -67,6 +67,9 @@ class ShipPower:
                     gesture.abort(now)
             if gesture.phase == "idle":
                 level = maximum if self.enabled(name) else 0
+                if name == "Ignition" and level and self.missing:
+                    phase = (now % 2.4) / 2.4
+                    level = round(maximum * (0.25 + 0.75 * abs(2 * phase - 1)))
             elif gesture.phase == "holding" and self.enabled(name):
                 level = maximum - level
             elif gesture.phase == "aborted" and self.enabled(name):
@@ -98,29 +101,20 @@ class ShipPower:
         if name == "CockpitHatch":
             if not self.hatch_closed:
                 return False
-            if self.switches_on:
-                self.message = "Hatch interlock: set all five switches OFF, then hold Cockpit Hatch."
+            if self.switches_on or self.engines or self.ignition != "Off":
+                self.message = "Hatch interlock: turn Start, Ignition and all five switches OFF."
                 return False
             self.hatch_closed = False
-            if self.engines:
-                self.engines = False
-                self.transitions.append("Start")
-            if self.ignition != "Off":
-                self.ignition = "Off"
-                self.transitions.append("Ignition")
         elif name == "Start":
             if not self.engines:
                 return False
             self.engines = False
+        elif self.engines:
+            self.message = "Ignition interlock: hold Start to disengage the drives first."
+            return False
         elif self.ignition == "On":
             self.ignition = "Standby"
-            if self.engines:
-                self.engines = False
-                self.transitions.append("Start")
         elif self.ignition == "Standby":
-            if self.missing:
-                self.message = "Ignition interlock: set the required switches ON, then hold Ignition."
-                return False
             self.ignition = "Off"
         else:
             return False

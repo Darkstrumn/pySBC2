@@ -380,21 +380,29 @@ and F3 together. Presets do not supply a game binding. Tank Detach is an
 example of Hold to Confirm and can be assigned the command of your choice.
 
 The Cockpit Hatch starts open and unlit. Tap to close it and latch the LED on.
-To exit the vessel, set all five switches OFF and hold Cockpit Hatch. The
-MFD lists any switches still on. Opening the hatch brings Ignition and the
-drives to Off and leaves the controller running. Close the hatch before
-arming Ignition again. The four-button maintenance gesture is separate.
+To exit the vessel, turn Start and Ignition Off, set all five switches OFF,
+then hold Cockpit Hatch. Close the hatch before arming Ignition again. The
+four-button maintenance gesture is separate.
 
-Startup walks through cockpit, switch, ignition, and drive checks. After
-startup, hold Ignition to enter Standby and stop the drives. With all
-five switches on, hold Ignition again to turn it Off. A short press from
-Off or Standby restores it to On once the switch checklist passes. With
-Ignition On, tap Start to engage the drives and hold Start to disengage.
-A short press of either active control shows abort feedback and keeps its
-power state. The MFD describes any blocked operation. Physical LEDs
-settle to the current power state after feedback.
+Hold Start to disengage the drives regardless of the five switch positions.
+With Start Off, hold Ignition once to enter Standby and again to turn it
+Off. To arm Ignition from Off or Standby, close the hatch and set all five
+switches ON before tapping Ignition. With Ignition On, tap Start to engage
+the drives. Turning a subsystem switch off while Ignition is On leaves it
+on and makes its LED pulse slowly. A short press of an active power control
+shows abort feedback and keeps its state.
 
 A configured Ignition or Start action fires on a committed transition.
-Stopping the drives by moving Ignition to Standby also invokes the
-configured Start action. The built-in states gate inputs locally and
-publish vessel state. Bind or route game-specific actions separately.
+Bind or route game-specific actions separately.
+
+For an optional Elite hardpoints interlock, set `hardpoints_switch` in the
+active profile to one of the five physical toggle names, such as
+`ToggleBufferMaterial`. With that switch off, the macro engine blocks new
+actions mapped to `WeaponCtrlMain`, `WeaponCtrlSub`, `RightJoyMainWeapon`,
+and `RightJoyFire`. An admitted held key mapping is released when the
+switch goes off. Gated scripts run once per admitted press. A scripted
+sequence that has already started can finish.
+Use JSON `null` to disable the gate. This is a local button macro gate and
+does not track the game's deployed hardpoint state or modify existing key
+bindings. Map the chosen switch separately if it should also command
+hardpoints in the game.
