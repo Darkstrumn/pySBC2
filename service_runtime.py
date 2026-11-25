@@ -167,12 +167,14 @@ class PollingService:
 class ReaderService(PollingService):
     """Poll USB input and update runtime state cache."""
 
-    def __init__(self, sbc, interval_ms, bus=None, audit_sink=None):
+    def __init__(self, sbc, interval_ms, bus=None, audit_sink=None, event_sink=None):
         super().__init__("reader", interval_ms)
         self.sbc = sbc
         self.bus = bus
         self.audit_sink = audit_sink
         self.latest_state = None
+        self.event_sink = event_sink
+        self._logical = dict(sbc.logical_state)
         self.sample_handlers = ()
 
     def tick(self, now_s):
@@ -180,6 +182,16 @@ class ReaderService(PollingService):
         self.latest_state = self.sbc.parse_state(buf)
         for handle_sample in self.sample_handlers:
             handle_sample(self.latest_state)
+        if self.event_sink is not None:
+            for index, control in enumerate(self.sbc.button_names):
+                logical = self.sbc.get_logical_state(control)
+                if self.sbc.button_changed(index) or logical != self._logical.get(control):
+                    self.event_sink.publish({
+                        "type": "button", "control": control,
+                        "pressed": self.sbc.get_button_state(index), "logical_state": logical,
+                        "timestamp_ms": int(time.time() * 1000),
+                    })
+                self._logical[control] = logical
         if self.bus is not None:
             self.bus.publish("reader.state", self.latest_state)
         if self.audit_sink is not None:
@@ -597,19 +609,25 @@ class CommandRouter:
 
     def _on_button_command(self, payload):
         control_name = (payload or {}).get("control")
-        pressed = bool((payload or {}).get("pressed", True))
+        pressed = (payload or {}).get("pressed", True)
+        if not isinstance(control_name, str) or not control_name or type(pressed) is not bool:
+            return
         self.input_matrix.queue_button(control_name, pressed, source="mqtt", payload=payload or {})
         if self.event_sink is not None:
             self.event_sink.publish({"type": "command_button", "control": control_name, "pressed": pressed})
 
     def _on_macro_command(self, payload):
         macro_name = (payload or {}).get("macro")
+        if not isinstance(macro_name, str) or not macro_name:
+            return
         self.input_matrix.queue_macro(macro_name, source="mqtt", payload=payload or {})
         if self.event_sink is not None:
             self.event_sink.publish({"type": "command_macro", "macro": macro_name})
 
     def _on_event_command(self, payload):
         name = (payload or {}).get("name")
+        if not isinstance(name, str) or not name:
+            return
         self.input_matrix.queue_event(name, source="mqtt", payload=payload or {})
         if self.event_sink is not None:
             self.event_sink.publish({"type": "command_event", "name": name})
@@ -677,7 +695,7 @@ def build_services(
     telemetry_ms = int(services_cfg.get("telemetry_poll_ms", net_cfg.get("send_interval_ms", 20)))
     model_snapshot_ms = int(services_cfg.get("model_snapshot_ms", 250))
 
-    reader_service = ReaderService(sbc, interval_ms=reader_ms, bus=bus)
+    reader_service = ReaderService(sbc, interval_ms=reader_ms, bus=bus, event_sink=event_sink)
     state_provider = lambda: reader_service.latest_state
     writer_service = WriterService(
         sbc=sbc,
