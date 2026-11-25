@@ -211,6 +211,63 @@ Importable flows:
 - `node_red/flows_sbc_event_bridge.json`
 - `node_red/flows_sbc_ai_copilot.json`
 
+#### Pi controller and game-host bridge
+
+On a fresh Pi install, run `./scripts/install_rpi.sh --with-sbc-mqtt` as the
+Pi account that runs Node-RED. It installs Node-RED and Mosquitto, seeds the
+host bridge flow on a fresh Node-RED user directory, and enables MQTT in
+the active SBC profile. For an existing flow setup, import the supplied
+flow through the editor. The installer leaves existing broker connection
+settings in place. Configure the broker's listener and accounts for LAN
+clients before connecting a separate game host or sim rig.
+
+For the Pygame controller runtime (`sbc-driver-test1.py`), set
+`mqtt.enabled` to `true` in the active profile and point `mqtt.host` and
+`mqtt.port` at your broker. The supplied flow uses the default `sbc` topic
+prefix and a broker at `127.0.0.1:1883` from Node-RED's perspective. Import
+`node_red/flows_sbc_event_bridge.json` into the Node-RED editor, edit its
+broker connection if needed, then deploy. For a different base topic,
+update the MQTT input filters and function node topics together.
+
+| Path | MQTT topic | Purpose |
+| --- | --- | --- |
+| Pi → broker | `sbc/events/#` | Controller events for Node-RED and independent sim-rig subscribers |
+| Node-RED → host | `sbc/host/control/#` | Routed controller output for a game-host subscriber |
+| Host → Node-RED | `sbc/host/feedback` | JSON with a `command` and an object `payload` |
+| Node-RED → Pi | `sbc/cmd/{button,macro,led,event}` | Validated command routed to the runtime |
+
+The default host route forwards `meta`, `button`, `raw_state`, `macro_key`,
+`aux_input`, and `vessel_snapshot` as individual topics. Subscribe to
+`sbc/host/control/macro_key` for mapped key down/up events, or use
+`sbc/host/control/button` for physical and logical edges in a host-side
+mapping. Use one input path per binding to avoid duplicate actions.
+`meta` provides the raw button array order and is retained for late
+subscribers. Button edges and key events are live, non-retained messages.
+A sim rig can subscribe directly to the controller and publish its own game
+or rig telemetry on a separate topic. The host client owns HID injection
+and consumes the routed messages through its MQTT subscriber. The existing
+`SbcSubscriberApp` uses its TCP transport.
+
+To check the Pi return path, publish the following with retain disabled to
+`sbc/host/feedback`. The Comm1 LED should blink briefly:
+
+```json
+{"command":"led","payload":{"led":"Comm1","mode":"blink","intensity":10,"period_ms":240,"duration_ms":720}}
+```
+
+Run the hardware-free round-trip test on a development machine with
+Python 3.11+ and Node-RED installed:
+
+```sh
+python3 -m pip install amqtt paho-mqtt
+python3 -m unittest discover -s tests -p test_mqtt_roundtrip.py
+```
+
+Set `NODE_RED` to the executable path if it is outside `PATH`. The test
+starts an isolated broker and imports the flow in a temporary Node-RED
+instance. It checks startup metadata, a controller button edge, a mapped
+key event, and a host macro command dispatched by the Pi runtime.
+
 ### 3.3 Runtime logging and replay context
 
 - `audit.path` controls append-only context log location.

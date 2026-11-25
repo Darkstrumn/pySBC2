@@ -2,185 +2,103 @@
   {
     "id": "tab_sbc_events",
     "type": "tab",
-    "label": "SBC Event Bridge",
+    "label": "SBC Host Bridge",
     "disabled": false,
-    "info": "Example bridge: button events -> LED command, plus event monitoring"
+    "info": "Customize the controller-to-host routing and host-to-controller feedback independently. No HID output is produced inside this flow."
   },
   {
-    "id": "mqtt_in_button_events",
+    "id": "sbc_controller_events",
     "type": "mqtt in",
     "z": "tab_sbc_events",
-    "name": "sbc/events/button",
-    "topic": "sbc/events/button",
-    "qos": "0",
-    "datatype": "auto-detect",
-    "broker": "mqtt_broker_local",
-    "nl": false,
-    "rap": true,
-    "rh": 0,
-    "inputs": 0,
-    "x": 130,
+    "name": "Controller events",
+    "x": 140,
     "y": 80,
     "wires": [
       [
-        "fn_button_to_led",
-        "debug_button_events"
+        "sbc_to_host"
       ]
-    ]
-  },
-  {
-    "id": "fn_button_to_led",
-    "type": "function",
-    "z": "tab_sbc_events",
-    "name": "Start->LED Momentary",
-    "func": "const ev = msg.payload || {};\nif (ev.control !== \"Start\") {\n    return null;\n}\nmsg.topic = \"sbc/cmd/led\";\nmsg.payload = {\n    led: \"Start\",\n    mode: ev.pressed ? \"steady\" : \"off\",\n    intensity: 15\n};\nreturn msg;",
-    "outputs": 1,
-    "timeout": "",
-    "noerr": 0,
-    "initialize": "",
-    "finalize": "",
-    "libs": [],
-    "x": 360,
-    "y": 80,
-    "wires": [
-      [
-        "mqtt_out_cmd_led",
-        "debug_led_cmd"
-      ]
-    ]
-  },
-  {
-    "id": "mqtt_out_cmd_led",
-    "type": "mqtt out",
-    "z": "tab_sbc_events",
-    "name": "sbc/cmd/led",
-    "topic": "sbc/cmd/led",
-    "qos": "",
-    "retain": "",
-    "respTopic": "",
-    "contentType": "",
-    "userProps": "",
-    "correl": "",
-    "expiry": "",
-    "broker": "mqtt_broker_local",
-    "x": 600,
-    "y": 80,
-    "wires": []
-  },
-  {
-    "id": "mqtt_in_all_events",
-    "type": "mqtt in",
-    "z": "tab_sbc_events",
-    "name": "sbc/events/#",
+    ],
     "topic": "sbc/events/#",
     "qos": "0",
-    "datatype": "auto-detect",
+    "datatype": "json",
     "broker": "mqtt_broker_local",
-    "nl": false,
-    "rap": true,
-    "rh": 0,
-    "inputs": 0,
-    "x": 110,
-    "y": 180,
-    "wires": [
-      [
-        "debug_all_events"
-      ]
-    ]
+    "rap": false,
+    "rh": 0
   },
   {
-    "id": "inject_macro_from_nodered",
-    "type": "inject",
+    "id": "sbc_to_host",
+    "type": "function",
     "z": "tab_sbc_events",
-    "name": "Trigger powerup macro",
-    "props": [
-      {
-        "p": "payload"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.1,
-    "topic": "",
-    "payload": "{\"macro\":\"powerup\"}",
-    "payloadType": "json",
-    "x": 140,
-    "y": 260,
+    "name": "Route game-host output",
+    "x": 400,
+    "y": 80,
     "wires": [
       [
-        "mqtt_out_cmd_macro"
+        "sbc_host_out"
       ]
-    ]
+    ],
+    "outputs": 1,
+    "func": "const allowed = [\"meta\", \"button\", \"raw_state\", \"macro_key\", \"aux_input\", \"vessel_snapshot\"];\nconst type = msg.topic.split(\"/\").pop();\nif (!allowed.includes(type)) return null;\nmsg.topic = \"sbc/host/control/\" + type;\nmsg.retain = type === \"meta\";\nreturn msg;"
   },
   {
-    "id": "mqtt_out_cmd_macro",
+    "id": "sbc_host_out",
     "type": "mqtt out",
     "z": "tab_sbc_events",
-    "name": "sbc/cmd/macro",
-    "topic": "sbc/cmd/macro",
+    "name": "Host and HID subscribers",
+    "x": 690,
+    "y": 80,
+    "wires": [],
+    "topic": "",
     "qos": "",
     "retain": "",
-    "respTopic": "",
-    "contentType": "",
-    "userProps": "",
-    "correl": "",
-    "expiry": "",
-    "broker": "mqtt_broker_local",
-    "x": 390,
-    "y": 260,
-    "wires": []
+    "broker": "mqtt_broker_local"
   },
   {
-    "id": "debug_button_events",
-    "type": "debug",
+    "id": "sbc_host_feedback",
+    "type": "mqtt in",
     "z": "tab_sbc_events",
-    "name": "Button Events",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "payload",
-    "targetType": "msg",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 350,
-    "y": 40,
-    "wires": []
-  },
-  {
-    "id": "debug_led_cmd",
-    "type": "debug",
-    "z": "tab_sbc_events",
-    "name": "LED Cmd Out",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "payload",
-    "targetType": "msg",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 600,
-    "y": 40,
-    "wires": []
-  },
-  {
-    "id": "debug_all_events",
-    "type": "debug",
-    "z": "tab_sbc_events",
-    "name": "All SBC Events",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": false,
-    "complete": "true",
-    "targetType": "full",
-    "statusVal": "",
-    "statusType": "auto",
-    "x": 350,
+    "name": "Host feedback",
+    "x": 140,
     "y": 180,
-    "wires": []
+    "wires": [
+      [
+        "sbc_to_controller"
+      ]
+    ],
+    "topic": "sbc/host/feedback",
+    "qos": "0",
+    "datatype": "json",
+    "broker": "mqtt_broker_local",
+    "rap": false,
+    "rh": 0
+  },
+  {
+    "id": "sbc_to_controller",
+    "type": "function",
+    "z": "tab_sbc_events",
+    "name": "Validate and route feedback",
+    "x": 400,
+    "y": 180,
+    "wires": [
+      [
+        "sbc_command_out"
+      ]
+    ],
+    "outputs": 1,
+    "func": "if (msg.retain) return null;\nconst request = msg.payload;\nif (!request || ![\"button\", \"macro\", \"led\", \"event\"].includes(request.command)) return null;\nconst body = request.payload;\nif (!body || typeof body !== \"object\" || Array.isArray(body)) return null;\nmsg.topic = \"sbc/cmd/\" + request.command;\nmsg.payload = body;\nmsg.retain = false;\nreturn msg;"
+  },
+  {
+    "id": "sbc_command_out",
+    "type": "mqtt out",
+    "z": "tab_sbc_events",
+    "name": "Controller commands",
+    "x": 690,
+    "y": 180,
+    "wires": [],
+    "topic": "",
+    "qos": "",
+    "retain": "false",
+    "broker": "mqtt_broker_local"
   },
   {
     "id": "mqtt_broker_local",

@@ -1,4 +1,5 @@
 import time
+from threading import Lock
 from collections import deque
 
 """
@@ -17,6 +18,7 @@ class InputMatrix:
 
     def __init__(self, event_sink=None, max_events=256):
         self.event_sink = event_sink
+        self._lock = Lock()
         self._events = deque(maxlen=max(1, int(max_events)))
 
     def queue_button(self, control_name, pressed, source="automation", payload=None):
@@ -61,9 +63,10 @@ class InputMatrix:
 
     def drain(self):
         """Return and clear all currently queued events."""
-        events = list(self._events)
-        self._events.clear()
-        return events
+        with self._lock:
+            events = list(self._events)
+            self._events.clear()
+            return events
 
     def __len__(self):
         return len(self._events)
@@ -72,7 +75,8 @@ class InputMatrix:
         """Internal append with timestamp and optional network publication."""
         event = dict(event)
         event.setdefault("timestamp_ms", int(time.time() * 1000))
-        self._events.append(event)
+        with self._lock:
+            self._events.append(event)
         if self.event_sink is not None:
             try:
                 self.event_sink.publish({"type": "input_queue", "event": event})

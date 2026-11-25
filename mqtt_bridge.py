@@ -32,6 +32,7 @@ class MqttBridge:
         self.bus = bus
         self.connected = False
         self._client = None
+        self._metadata = None
 
         command_topics = cfg.get("command_topics", {})
         self.topic_button = self._topic(command_topics.get("button", "cmd/button"))
@@ -58,15 +59,20 @@ class MqttBridge:
             return False
 
         try:
-            client = mqtt.Client()
+            if hasattr(mqtt, "CallbackAPIVersion"):
+                client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+                client.on_disconnect = self._on_disconnect_v2
+            else:
+                client = mqtt.Client()
+                client.on_disconnect = self._on_disconnect
+            client.max_queued_messages_set(256)
             if self.username:
                 client.username_pw_set(self.username, self.password)
             client.on_connect = self._on_connect
-            client.on_disconnect = self._on_disconnect
             client.on_message = self._on_message
             client.connect_async(self.host, self.port, self.keepalive)
-            client.loop_start()
             self._client = client
+            client.loop_start()
             self._log("mqtt_starting", {"host": self.host, "port": self.port})
             return True
         except Exception:
@@ -80,8 +86,8 @@ class MqttBridge:
         if self._client is None:
             return
         try:
-            self._client.loop_stop()
             self._client.disconnect()
+            self._client.loop_stop()
         except Exception:
             pass
         self.connected = False
@@ -90,27 +96,34 @@ class MqttBridge:
 
     def publish(self, payload):
         """Publish runtime events for Node-RED consumption."""
-        if self._client is None or not self.connected:
-            return
         payload = dict(payload or {})
         event_type = str(payload.get("type", "event")).strip().lower() or "event"
+        if event_type == "meta":
+            self._metadata = payload
+        if self._client is None or not self.connected:
+            return
         topic = self._topic(f"events/{event_type}")
         try:
             data = json.dumps(payload, separators=(",", ":"))
-            self._client.publish(topic, data, qos=self.publish_qos, retain=self.retain)
+            retain = event_type == "meta" or self.retain and event_type in ("raw_state", "vessel_snapshot")
+            info = self._client.publish(topic, data, qos=self.publish_qos, retain=retain)
+            if info.rc:
+                self._log("mqtt_publish_failed", {"topic": topic, "code": int(info.rc)})
         except Exception:
             self._log("mqtt_publish_failed", {"topic": topic, "event_type": event_type})
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
-        self.connected = int(rc) == 0
+        self.connected = rc == 0
         if not self.connected:
-            self._log("mqtt_connect_error", {"code": int(rc)})
+            self._log("mqtt_connect_error", {"code": getattr(rc, "value", rc)})
             return
         for topic in (self.topic_button, self.topic_macro, self.topic_led, self.topic_event):
             try:
                 client.subscribe(topic, qos=self.publish_qos)
             except Exception:
                 self._log("mqtt_subscribe_failed", {"topic": topic})
+        if self._metadata is not None:
+            self.publish(self._metadata)
         self._log(
             "mqtt_connected",
             {
@@ -120,12 +133,15 @@ class MqttBridge:
             },
         )
 
+    def _on_disconnect_v2(self, client, userdata, flags, reason_code, properties):
+        self._on_disconnect(client, userdata, reason_code, properties)
+
     def _on_disconnect(self, client, userdata, rc, properties=None):
         self.connected = False
-        self._log("mqtt_disconnected", {"code": int(rc)})
+        self._log("mqtt_disconnected", {"code": getattr(rc, "value", rc)})
 
     def _on_message(self, client, userdata, msg):
-        if self.bus is None:
+        if self.bus is None or msg.retain:
             return
         try:
             payload_text = msg.payload.decode("utf-8") if isinstance(msg.payload, (bytes, bytearray)) else str(msg.payload)
@@ -134,6 +150,9 @@ class MqttBridge:
             self._log("mqtt_bad_payload", {"topic": msg.topic})
             return
 
+        if not isinstance(payload, dict):
+            self._log("mqtt_bad_payload", {"topic": msg.topic})
+            return
         topic = str(msg.topic)
         if topic == self.topic_button:
             self.bus.publish("command.button", payload)

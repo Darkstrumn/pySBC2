@@ -2,6 +2,7 @@
 set -euo pipefail
 
 WITH_NODE_RED=0
+WITH_SBC_MQTT=0
 WITH_TENSORFLOW=0
 WITH_TFLITE=0
 WITH_AUDIO=1
@@ -14,6 +15,7 @@ Usage: ./scripts/install_rpi.sh [options]
 
 Options:
   --with-node-red     Install Node-RED using official installer script.
+  --with-sbc-mqtt     Install Node-RED, seed the SBC flow, and enable profile MQTT.
   --with-tensorflow   Install TensorFlow in the project venv.
   --with-tflite       Install TensorFlow Lite runtime in the project venv.
   --no-audio          Skip audio/TTS related Python modules.
@@ -30,6 +32,11 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --with-node-red)
       WITH_NODE_RED=1
+      shift
+      ;;
+    --with-sbc-mqtt)
+      WITH_NODE_RED=1
+      WITH_SBC_MQTT=1
       shift
       ;;
     --with-tensorflow)
@@ -153,6 +160,50 @@ if [[ "${WITH_TENSORFLOW}" -eq 1 ]]; then
 fi
 if [[ "${WITH_TFLITE}" -eq 1 ]]; then
   pip install tflite-runtime numpy
+fi
+
+if [[ "${WITH_SBC_MQTT}" -eq 1 ]]; then
+  "${PYTHON_BIN}" - "${PROJECT_ROOT}" "${HOME}/.node-red" <<'PYCONFIG'
+import json
+from pathlib import Path
+import shutil
+import sys
+from tempfile import NamedTemporaryFile
+
+project, user_dir = map(Path, sys.argv[1:])
+config_path = project / "sbc_config.json"
+config = json.loads(config_path.read_text())
+profile_name = config.get("active_profile", "default")
+profile = config.setdefault("profiles", {}).setdefault(profile_name, {})
+mqtt = profile.setdefault("mqtt", dict(config.get("mqtt", {})))
+if not mqtt.get("enabled"):
+    mqtt["enabled"] = True
+    with NamedTemporaryFile(mode="w", dir=project, delete=False) as output:
+        json.dump(config, output, indent=2)
+        output.write("\n")
+    temporary = Path(output.name)
+    shutil.copymode(config_path, temporary)
+    temporary.replace(config_path)
+print(f"MQTT enabled for SBC profile {profile_name}")
+
+source = project / "node_red" / "flows_sbc_event_bridge.json"
+user_dir.mkdir(parents=True, exist_ok=True)
+existing = list(user_dir.glob("flows*.json"))
+settings = user_dir / "settings.js"
+custom_flow = settings.is_file() and any(
+    line.lstrip().startswith("flowFile:") and "flows.json" not in line
+    for line in settings.read_text().splitlines()
+)
+if existing or custom_flow:
+    print(f"Import {source} in the Node-RED editor to preserve your current flow setup.")
+else:
+    with (user_dir / "flows.json").open("x") as destination:
+        destination.write(source.read_text())
+    print("Installed the SBC host bridge flow.")
+PYCONFIG
+  ${SUDO} systemctl enable --now mosquitto
+  ${SUDO} systemctl enable nodered.service
+  ${SUDO} systemctl restart nodered.service
 fi
 
 echo "[6/6] Install complete."
